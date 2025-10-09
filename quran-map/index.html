@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.js"></script>
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_650a101fa46c8081aa4ee9eed624a32a {
+                    position: relative;
+                    width: 100.0%;
+                    height: 65.0vh;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+        
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
+</head>
+<body>
+    
+    
+<style>
+.leaflet-tile-pane {
+  filter: grayscale(100%) sepia(40%) hue-rotate(330deg) saturate(70%) brightness(90%);
+}
+.leaflet-control, .leaflet-control * { filter: none !important; }
+</style>
+    
+<div id="siteHeader" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+            background:#111315; color:#f4f2ee;
+            border-bottom: 1px solid rgba(190,170,141,.35);
+            font-family: system-ui, Arial; padding: 10px 16px;">
+  <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:.5px;">
+      <img src='assets/icon_quran.png' alt="Quran" style="width:24px;height:24px;object-fit:contain;border-radius:6px;border:1px solid rgba(190,170,141,.45);background:#BEAA8D;" />
+      <span>DUNIA MEMBACA AL-QURAN</span>
+      <span style="opacity:.6;font-weight:400;font-size:12px;margin-left:10px;">Last updated: auto</span>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;gap:22px;">
+      <div><div style="opacity:.6;font-size:11px;">Total Qur'an</div>
+           <div style="font-size:18px;font-weight:700;">31,230</div></div>
+      <div><div style="opacity:.6;font-size:11px;">Projects</div>
+           <div style="font-size:18px;font-weight:700;">10</div></div>
+      <div><div style="opacity:.6;font-size:11px;">Countries</div>
+           <div style="font-size:18px;font-weight:700;">8</div></div>
+    </div>
+  </div>
+</div>
+<div id="headerSpacer" style="height:56px;"></div>
+    
+<style>
+  .marker-cluster div {
+    background:#BEAA8D !important;
+    color:#111 !important;
+    border:2px solid #9f8c70 !important;
+    box-shadow:0 0 0 2px rgba(0,0,0,.15) inset;
+  }
+  .marker-cluster {
+    background:rgba(190,170,141,.35) !important;
+  }
+  .marker-cluster:hover div {
+    filter:brightness(1.05);
+  }
+  .marker-cluster-small div,
+  .marker-cluster-medium div,
+  .marker-cluster-large div {
+    background:#BEAA8D !important;
+    border-color:#9f8c70 !important;
+  }
+</style>
+    
+<style>
+  :root { --header-h: 0px; } /* fallback */
+  /* make page + map background always dark */
+  html, body { background:#0f1114; }
+  .folium-map, .leaflet-container { background:#0f1114 !important; }
+</style>
+<script>
+  (function(){
+    function setHeaderHeight(){
+      var h = document.getElementById('siteHeader');
+      var s = document.getElementById('headerSpacer');
+      if(!h || !s) return;
+      var hh = h.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--header-h', hh + 'px');
+      s.style.height = hh + 'px';
+    }
+    window.addEventListener('load', setHeaderHeight);
+    window.addEventListener('resize', setHeaderHeight);
+  })();
+</script>
+    
+<script>
+(function() {
+  // ---- wait until the Folium map object exists (so addControl is defined) ----
+  function whenMapReady(fn) {
+    var tries = 0;
+    (function tick() {
+      var map = window['map_650a101fa46c8081aa4ee9eed624a32a'];
+      if (map && typeof map.addControl === 'function') { fn(map); return; }
+      if (tries++ < 400) return setTimeout(tick, 25); // up to ~10s
+      console.warn('Map never became ready for addControl/locking');
+    })();
+  }
+
+  // ---- LOCKED BOUNDS ----
+  whenMapReady(function(map) {
+    var bounds = L.latLngBounds(
+      L.latLng(-14.545707045, -8.136150595),
+      L.latLng(51.477986145, 49.206765295)
+    );
+    map.fitBounds(bounds, { padding:[20,20] });
+    map.setMaxBounds(bounds.pad(0.05));
+    map.options.maxBoundsViscosity = 1.0;
+    map.options.worldCopyJump = false;
+    map.options.inertia = false;
+    map.setMinZoom(Math.max(map.getZoom() - 1, 2));
+    map.setMaxZoom(12);
+  });
+
+  
+})();
+</script>
+
+<style>
+  .legend-wrap{font-family:system-ui,Arial;color:#f4f2ee}
+  .legend-pill{background:rgba(17,19,21,.92);border:1px solid rgba(190,170,141,.45);
+    border-radius:999px;padding:8px 12px;font-size:13px;display:flex;gap:10px;
+    align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer}
+  .legend-pill .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+<style>
+  .legend-wrap{position:relative;font-family:system-ui,Arial;color:#f4f2ee}
+  .legend-pill{background:rgba(17,19,21,.92);border:1px solid rgba(190,170,141,.45);
+    border-radius:999px;padding:8px 12px;font-size:13px;display:flex;gap:10px;
+    align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer}
+  .legend-pill .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+  
+  .legend-panel{
+    position:absolute;
+    top:100%;
+    left:0;
+    margin-top:8px;
+    background:rgba(17,19,21,.96);
+    border:1px solid rgba(190,170,141,.45);
+    border-radius:12px;
+    box-shadow:0 10px 28px rgba(0,0,0,.45);
+    padding:12px 14px;
+    width:260px;
+    z-index:9999;
+    transform-origin: top;
+    transform: scaleY(0);
+    opacity: 0;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+
+  .legend-panel.show{
+    display:block;
+    transform: scaleY(1);
+    opacity: 1;
+  }
+
+  .legend-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+  .legend-left{display:flex;align-items:center;gap:8px}
+  .legend-muted{opacity:.7;font-size:12px;margin-top:6px}
+  .leaflet-bottom.leaflet-left .legend-wrap{margin:0 0 10px 10px}
+</style>
+    
+            <div class="folium-map" id="map_650a101fa46c8081aa4ee9eed624a32a" ></div>
+        
+    
+<style>
+  html, body { background:#0f1114; }
+  .folium-map, .leaflet-container { background:#0f1114 !important; }
+  /* optional: remove any default top/bottom gaps */
+  body { margin:0; }
+</style>
+    
+<style>
+  /* tiny inline dot for table cells */
+  .pulse-dot{
+    display:inline-block; vertical-align:middle; margin-right:8px;
+    width:10px; height:10px; background:#6be27d; border-radius:50%;
+    box-shadow:0 0 0 0 rgba(107,226,125,.7);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  @keyframes pulse{
+    0%   { box-shadow:0 0 0 0 rgba(107,226,125,.7); }
+    70%  { box-shadow:0 0 0 10px rgba(107,226,125,0); }
+    100% { box-shadow:0 0 0 0 rgba(107,226,125,0); }
+  }
+
+  /* larger pulsing pin for the map (DivIcon) */
+  .pulse-pin{
+    position:relative; width:16px; height:16px; border-radius:50%;
+    background:#6be27d; box-shadow:0 0 0 0 rgba(107,226,125,.6);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  .pulse-pin:after{
+    content:""; position:absolute; left:50%; top:50%;
+    width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+    border:2px solid rgba(107,226,125,.45);
+    animation:ripple 1.8s ease-out infinite;
+  }
+  @keyframes ripple { from{transform:scale(.6); opacity:.9} to{transform:scale(1.5); opacity:0} }
+</style>
+    
+<script>
+(function() {
+  var data = [{'label': 'Chad', 'lat': 15.454166, 'lng': 18.732207}, {'label': 'Djibouti', 'lat': 11.825138, 'lng': 42.590275}, {'label': 'Niger', 'lat': 17.607789, 'lng': 8.081666}, {'label': 'Cameroon', 'lat': 12.087083, 'lng': 15.0148322}, {'label': 'Ethiopia', 'lat': 8.5263486, 'lng': 39.2583293}, {'label': 'Tanzania', 'lat': -6.1629685, 'lng': 39.1865491}, {'label': 'Tanzania', 'lat': -6.9275886, 'lng': 39.1335549}, {'label': 'Tanzania', 'lat': -6.135729500000001, 'lng': 39.3621196}, {'label': 'Sarajevo, Bosnia', 'lat': 43.8598677, 'lng': 18.4128265}, {'label': 'Ouagadougou, Burkina Faso', 'lat': 12.3714277, 'lng': -1.5196603}];
+  // Build a simple layer of invisible markers for search hits
+  var searchLayer = L.layerGroup().addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+  data.forEach(function(d) {
+    L.marker([d.lat, d.lng], {opacity:0}).bindTooltip(d.label).addTo(searchLayer);
+  });
+  var searchControl = new L.Control.Search({
+    layer: searchLayer,
+    propertyName: 'title', // not used because we use tooltips
+    zoom: 8,
+    initial: false,
+    collapsed: false,
+    textPlaceholder: 'Search place or benefitor',
+    position: 'topleft'
+  });
+  searchControl._input.style.width = '220px';
+  map_650a101fa46c8081aa4ee9eed624a32a.addControl(searchControl);
+})();
+</script>
+    
+<style>
+  .legend-wrap {
+    position: relative;                 /* allow absolute-positioned panel */
+    font-family: system-ui, Arial;
+    color: #f4f2ee;
+  }
+  .legend-pill {
+    background: rgba(17,19,21,.92);
+    border: 1px solid rgba(190,170,141,.45);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 13px;
+    display:flex; align-items:center; gap:10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35);
+    cursor: pointer; user-select: none;
+  }
+  .legend-pill .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
+
+  /* PANEL OPENS UP */
+  .legend-panel {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);          /* <— ABOVE the pill, with 8px gap */
+    display: none;
+    background: rgba(17,19,21,.96);
+    border: 1px solid rgba(190,170,141,.45);
+    border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    padding: 12px 14px; width: 260px;
+  }
+  .legend-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+  .legend-left { display:flex; align-items:center; gap:8px; }
+  .legend-muted { opacity:.7; font-size:12px; margin-top:6px; }
+
+  /* optional: little upward caret */
+  .legend-panel::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    top: 100%;                          /* caret below the panel pointing to pill */
+    border-width: 8px;
+    border-style: solid;
+    border-color: rgba(17,19,21,.96) transparent transparent transparent;
+  }
+
+  /* nudge legend within map frame */
+  .leaflet-bottom.leaflet-left .legend-wrap { margin: 0 0 10px 10px; }
+</style>
+
+<script>
+(function() {
+  // wait until map.addControl exists
+  function whenMapReady(fn) {
+    var tries = 0;
+    (function tick() {
+      var map = window['map_650a101fa46c8081aa4ee9eed624a32a'];
+      if (map && typeof map.addControl === 'function') { fn(map); return; }
+      if (tries++ < 400) return setTimeout(tick, 25);
+      console.warn('Legend: map.addControl not ready');
+    })();
+  }
+
+  whenMapReady(function(map){
+    // Remove any previous legends to avoid duplicates (safety net)
+    Array.from(document.querySelectorAll('.legend-wrap')).forEach(function(wrap){
+      var ctrl = wrap.closest('.leaflet-control');
+      if (ctrl && ctrl.parentNode) ctrl.parentNode.removeChild(ctrl);
+    });
+
+    var LegendControl = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: function() {
+        var container = L.DomUtil.create('div', 'legend-wrap');
+
+        var pill = L.DomUtil.create('div', 'legend-pill', container);
+        pill.innerHTML = `
+          <span class="dot" style="background:#ff6b6b"></span><b>2</b>
+          <span class="dot" style="background:#ffaa3b"></span><b>7</b>
+          <span class="dot" style="background:#8bdc65"></span><b>1</b>
+          <span style="opacity:.8;">Impact</span>
+        `;
+
+        var panel = L.DomUtil.create('div', 'legend-panel', container);
+        panel.innerHTML = `
+          <div style="font-weight:700; margin-bottom:6px;">Distribution Impact</div>
+          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#ff6b6b"></span> High Impact</div><div><b>2</b></div></div>
+          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#ffaa3b"></span> Moderate</div><div><b>7</b></div></div>
+          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#8bdc65"></span> Active</div><div><b>1</b></div></div>
+          <div class="legend-muted">Yellow dots = project · Heat = intensity · Blinking green = upcoming project</div>
+        `;
+
+        var open = false;
+        function render() { panel.style.display = open ? 'block' : 'none'; }
+        pill.addEventListener('click', function() { open = !open; render(); });
+        render();
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        return container;
+      }
+    });
+    map.addControl(new LegendControl());
+  });
+})();
+</script>
+    
+<style>
+  /* Dark popup shell (remove Leaflet's white) */
+  .leaflet-popup-content-wrapper {
+    background: #1b1e22;              /* dark panel */
+    color: #f4f2ee;                   /* light text */
+    border: 1px solid rgba(190,170,141,.45); /* #BEAA8D-ish */
+    border-radius: 14px;
+    box-shadow: 0 16px 44px rgba(0,0,0,.55);
+    padding: 0;                       /* we'll pad the inner content */
+  }
+  /* The little triangle tip */
+  .leaflet-popup-tip {
+    background: #1b1e22;
+    border: 1px solid rgba(190,170,141,.45);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  /* Inner content area margin/padding */
+  .leaflet-popup-content {
+    margin: 0;                        /* wipe defaults */
+    padding: 14px 16px 12px 16px;     /* comfy spacing */
+    min-width: 240px;
+  }
+  /* Close (×) button */
+  .leaflet-container a.leaflet-popup-close-button {
+    color: #f4f2ee !important;
+    background: rgba(0,0,0,.35);
+    border-radius: 8px;
+    width: 28px; height: 28px; line-height: 28px;
+    right: 8px; top: 8px;
+  }
+  .leaflet-container a.leaflet-popup-close-button:hover {
+    background: rgba(190,170,141,.35);
+  }
+
+  /* Tooltips (the small white label you see on hover) */
+  .leaflet-tooltip {
+    background: rgba(0,0,0,.85);
+    color: #f4f2ee;
+    border: 1px solid rgba(190,170,141,.45);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  }
+  .leaflet-tooltip-left:before,
+  .leaflet-tooltip-right:before,
+  .leaflet-tooltip-top:before,
+  .leaflet-tooltip-bottom:before {
+    border-*-color: rgba(0,0,0,.85);  /* all directions get dark tip */
+  }
+</style>
+    
+<style>
+  :root {
+    --bg:#0f1114; --panel:#171a1f; --text:#f4f2ee; --muted:#bda988;
+    --border:rgba(190,170,141,.35); --rowAlt:rgba(190,170,141,.05);
+  }
+  .dash-wrap { max-width: 1180px; margin: calc(var(--header-h,56px) + 8px) auto 28px; padding: 0 16px; font-family: system-ui, Arial; }
+  .dash-title { color: var(--text); font-size: 20px; font-weight: 800; margin: 12px 0; }
+
+  .table-wrap { background:transparent; overflow-x:auto; border-radius:12px; }
+  .tbl {
+    min-width: 720px; width:100%;
+    background:var(--panel); color:var(--text);
+    border:1px solid var(--border); border-radius:12px; overflow:hidden;
+    box-shadow: 0 6px 22px rgba(0,0,0,.35);
+    border-collapse:collapse;
+  }
+  .tbl thead th {
+    position: sticky; top: 0px;
+    background: rgba(190,170,141,.14); color:var(--text);
+    font-size:13px; font-weight:800; text-align:left; padding:12px 14px;
+    border-bottom:1px solid var(--border); white-space:nowrap; z-index:1;
+  }
+  .tbl tbody td { padding:8px 12px; border-top:1px solid var(--border); vertical-align:top; }
+  .tbl tbody tr:nth-child(even) td { background: var(--rowAlt); }
+  .tbl .num { text-align:right; font-variant-numeric: tabular-nums; }
+
+  /* NEW: style blanks */
+  .tbl td.placeholder { color:#888; font-style:italic; }
+</style>
+
+<div class="dash-wrap">
+  <div class="dash-title">Project Locations</div>
+  <div class="table-wrap">
+    <table class="tbl" id="impactTable">
+      <thead>
+        <tr>
+          <th>Impact</th>
+          <th>Place</th>
+          <th>Benefitors</th>
+          <th class="num">Total Qur'an</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Tanzania</td><td>Chaani, Shangani, Potoa, Kidoti</td><td class="num">8,680</td></tr><tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Chad</td><td class="placeholder">—</td><td class="num">5,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Djibouti</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Niger</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Dar Es Salaam, Pulau Zanzibar</td><td class="num">3,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Cameroon</td><td>Kousseri, Youndi</td><td class="num">2,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Sarajevo, Bosnia</td><td>Masjid Ship, Masjid Jezero, Masjid Sedrenik</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Ilala, Temeke</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Ethiopia</td><td>Adama, Odomia</td><td class="num">1,000</td></tr><tr class='active-row'><td><span class="chip chip--active" style="--chip:#ff6b6b">Active</span></td><td><span class="pulse-dot" title="Launch: 22 Dec 2025"></span>Ouagadougou, Burkina Faso</td><td>Madrasah Izharuddin, Kombissiri</td><td class="num">250</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+    
+<style>
+  /* Solid backgrounds so the map can't show through */
+  .table-wrap { background:#171a1f; }
+  .tbl       { background:#171a1f; }
+
+  /* Header */
+  .tbl thead th{
+    background:#1e2227 !important;
+    background-image:none !important;
+    box-shadow:none !important;
+  }
+
+  /* Body cells */
+  .tbl td{
+    background:#171a1f !important;
+    background-image:none !important;   /* kill any gradients */
+    box-shadow:none !important;
+  }
+  .tbl tbody tr:nth-child(even) td{
+    background:#1b1f24 !important;      /* subtle zebra, still solid */
+  }
+
+  /* Numeric column has no progress-like visuals */
+  .tbl .num{
+    background:transparent !important;
+    background-image:none !important;
+  }
+
+</style>
+    
+<style>
+  .chip--active{
+    background: rgba(255,107,107,.10) !important; /* soft red fill */
+    border: 2px solid #ff6b6b !important;
+    border-radius: 10px !important;
+    color: #ffcdcd !important;
+    padding: 3px 10px !important;
+    box-shadow: 0 0 0 1px rgba(255,107,107,.25) inset;
+  }
+</style>
+    
+<script>
+  (function(){
+    const table = document.getElementById('impactTable');
+    if(!table) return;
+    const headCells = table.querySelectorAll('thead th');
+    headCells.forEach((th, idx) => {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', () => {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const asc = th.classList.toggle('asc');
+        headCells.forEach(h => { if(h!==th) h.classList.remove('asc'); });
+        const isNum = th.classList.contains('num');
+        const val = (tr) => {
+          const t = tr.children[idx].textContent.trim();
+          return isNum ? (parseInt(t.replace(/[^0-9]/g,'')) || 0) : t.toLowerCase();
+        };
+        rows.sort((a,b) => {
+          const va = val(a), vb = val(b);
+          return isNum ? (asc ? va - vb : vb - va) : (asc ? (va>vb)-(va<vb) : (vb>va)-(vb<va));
+        });
+        rows.forEach(r => tbody.appendChild(r));
+      });
+    });
+  })();
+</script>
+    
+<style>
+  /* Desktop keeps all 4 columns (unchanged) */
+
+  /* Tablet and down: show only Place, Benefitors, Total Qur'an */
+  @media (max-width: 992px){
+    /* remove wide min-width so it can shrink naturally */
+    .tbl{ min-width: 0; }
+
+    /* hide the 1st column (Impact) in header and body */
+    .tbl thead th:nth-child(1),
+    .tbl tbody td:nth-child(1){ display:none; }
+
+    /* tighten padding a bit */
+    .tbl thead th{ padding:10px 12px; }
+    .tbl tbody td{ padding:8px 12px; }
+  }
+
+  /* Small phones: a bit tighter yet */
+  @media (max-width: 520px){
+    .tbl thead th{ top: 0px; font-size:12px; }
+    .tbl tbody td{ padding:8px 10px; }
+    .tbl tbody tr.active-row {
+    background: rgba(190, 170, 141, 0.35);   /* light #BEAA8D tint */
+    border: 1px solid #BEAA8D;
+    box-shadow: 0 0 10px 2px rgba(190, 170, 141, 0.35);
+    transition: box-shadow 0.3s ease, background 0.3s ease;
+    }
+    /* Optional hover effect */
+    .tbl tbody tr.active-row:hover {
+    background: rgba(190, 170, 141, 0.25);
+    box-shadow: 0 0 12px 3px rgba(190, 170, 141, 0.45);
+    }
+  }
+</style>
+    
+<style>
+  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn {
+    position: absolute;
+    bottom: 20px;          /* 👈 Bottom position */
+    right: 20px;           /* 👈 Right position */
+    z-index: 1200;
+    background: #BEAA8D;
+    color: #111315;
+    font-weight: 800;
+    letter-spacing: .2px;
+    text-decoration: none;
+    padding: 12px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.15);
+    box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    font-size: 14px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease;
+  }
+  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn:hover {
+    filter: brightness(0.92);
+    transform: translateY(-2px);
+  }
+  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn:active {
+    transform: translateY(0);
+  }
+  @media (max-width: 520px) {
+    #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn {
+      bottom: 16px;
+      right: 16px;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+  }
+</style>
+
+<script>
+(function(){
+  function whenMapReady(fn){
+    var tries=0;
+    (function tick(){
+      var map = window['map_650a101fa46c8081aa4ee9eed624a32a'];
+      if(map && map.getContainer) { fn(map); return; }
+      if(tries++ < 400) return setTimeout(tick, 25);
+      console.warn('Donate button: map container not ready');
+    })();
+  }
+  whenMapReady(function(map){
+    var cont = map.getContainer();
+    // remove duplicate button if cell re-run
+    var existing = cont.querySelector('.donate-btn');
+    if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var a = document.createElement('a');
+    a.className = 'donate-btn';
+    a.href = 'https://pertubuhanpemikiranbadiuzzamandanrisalahannur.bcl.my/form/DuniaMembacaAl-Quran';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = "Waqf Al-Quran RM40";
+
+    // prevent drag/zoom when clicking button
+    ['click','dblclick','mousedown','mouseup','touchstart','touchend','wheel'].forEach(function(ev){
+      a.addEventListener(ev, function(e){ e.stopPropagation(); });
+    });
+
+    cont.appendChild(a);
+  });
+})();
+</script>
+    
+<style>
+  /* scoped to the dashboard area */
+  .kpi-wrap {
+    max-width: 1180px; margin: calc(var(--header-h,6px) + 8px) auto 10px; 
+    padding: 16px; font-family: system-ui, Arial;
+  }
+  .kpi-card {
+    background:#171a1f; color:#f4f2ee; 
+    border:1px solid rgba(190,170,141,.35); 
+    border-radius:12px; padding:16px; 
+    box-shadow:0 6px 22px rgba(0,0,0,.35);
+  }
+  .kpi-row {
+    display:flex; align-items:baseline; flex-wrap:wrap; gap:18px; margin-bottom:10px;
+  }
+  .kpi-title { font-weight:800; font-size:18px; letter-spacing:.2px; }
+  .kpi-numbers { margin-left:auto; display:flex; gap:18px; }
+  .kpi-numbers .item small { display:block; opacity:.7; font-size:12px; }
+  .kpi-numbers .item b { font-weight:800; font-size:16px; }
+
+  .progress-outer {
+    width:100%; height:16px; 
+    background:#0f1114; 
+    border:1px solid rgba(190,170,141,.35); 
+    border-radius:999px; overflow:hidden;
+  }
+  .progress-inner {
+    height:100%; width:0%;
+    background:#BEAA8D;
+    border-right:2px solid rgba(255,255,255,.25);
+    transition: width .8s ease;
+  }
+  .progress-foot {
+    display:flex; justify-content:space-between; 
+    font-size:12px; opacity:.8; margin-top:8px;
+  }
+
+  @media (max-width: 520px) {
+    .kpi-numbers { width:100%; margin-left:0; }
+  }
+</style>
+
+<div class="kpi-wrap">
+  <div class="kpi-card">
+    <div class="kpi-row">
+      <div class="kpi-title">Naskhah Al-Qur’an Telah Diedarkan<br>Seluruh Dunia</div>
+      <div class="kpi-numbers">
+        <div class="item">
+          <small>Malaysia</small>
+          <b>31,230</b>
+        </div>
+        <div class="item">
+          <small>All</small>
+          <b>1,453,456</b>
+        </div>
+        <div class="item">
+          <small>Target</small>
+          <b>10,000,000</b>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-outer" aria-label="Overall progress" role="progressbar" 
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="14.53">
+      <div class="progress-inner" style="width:14.53%;"></div>
+    </div>
+    <div class="progress-foot">
+      <span>14.53%</span><span>100%</span>
+    </div>
+  </div>
+</div>
+</body>
+<script>
+    
+    
+            var map_650a101fa46c8081aa4ee9eed624a32a = L.map(
+                "map_650a101fa46c8081aa4ee9eed624a32a",
+                {
+                    center: [10.25055334, 25.82526993],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 3,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_0205bfd226cfa1b960c5393589936452 = L.tileLayer(
+                "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoibWF0dW11YWR6IiwiYSI6ImNtZ2pnY3RxdzBqMWIyaXNmNWdpZGY1MHcifQ.SaKbTclv2YC_jYCyg4duNA",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "\u00a9 Mapbox \u00a9 OpenStreetMap",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_0205bfd226cfa1b960c5393589936452.addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+        
+    
+            var feature_group_42780829d8b3ea0b2243a12a6e93e853 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            feature_group_42780829d8b3ea0b2243a12a6e93e853.addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+        
+    
+            tile_layer_0205bfd226cfa1b960c5393589936452.addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+        
+    
+            feature_group_42780829d8b3ea0b2243a12a6e93e853.addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+        
+    
+            var marker_cluster_38407f48bfb0ef1004c5827501774c97 = L.markerClusterGroup(
+                {
+  "maxClusterRadius": 20,
+  "disableClusteringAtZoom": 5,
+  "spiderfyOnMaxZoom": true,
+  "showCoverageOnHover": false,
+  "zoomToBoundsOnClick": true,
+}
+            );
+        
+    
+            var circle_marker_a9429c1682d7259ec8aae315b2f6447e = L.circleMarker(
+                [15.454166, 18.732207],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_62b8b5bfe5e799be1c79aac7ba3f5fbc = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6db4b66411587c9a42bcce4f0a69677b = $(`<div id="html_6db4b66411587c9a42bcce4f0a69677b" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Chad</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Chad</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>High Impact</b></div>           <div>Total Qur'an: <b>5,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_62b8b5bfe5e799be1c79aac7ba3f5fbc.setContent(html_6db4b66411587c9a42bcce4f0a69677b);
+            
+        
+
+        circle_marker_a9429c1682d7259ec8aae315b2f6447e.bindPopup(popup_62b8b5bfe5e799be1c79aac7ba3f5fbc)
+        ;
+
+        
+    
+    
+            circle_marker_a9429c1682d7259ec8aae315b2f6447e.bindTooltip(
+                `<div>
+                     Chad — 5000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_36e701f1f7fbbe9b90b7f7c8e4845546 = L.circleMarker(
+                [15.454166, 18.732207],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_11aa66291246650ea7747fb45754f0e4 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_bb0b15266bb3ba7368a75854f344b2e0 = $(`<div id="html_bb0b15266bb3ba7368a75854f344b2e0" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Chad</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Chad</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>High Impact</b></div>           <div>Total Qur'an: <b>5,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_11aa66291246650ea7747fb45754f0e4.setContent(html_bb0b15266bb3ba7368a75854f344b2e0);
+            
+        
+
+        circle_marker_36e701f1f7fbbe9b90b7f7c8e4845546.bindPopup(popup_11aa66291246650ea7747fb45754f0e4)
+        ;
+
+        
+    
+    
+            circle_marker_36e701f1f7fbbe9b90b7f7c8e4845546.bindTooltip(
+                `<div>
+                     Chad — 5000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_88487fe998b4cdfe18714390381b4625 = L.circleMarker(
+                [11.825138, 42.590275],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_04fc7097e78c5c94fed57ffa1a067f33 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_9f7e59229a84ade63e5c028936f67017 = $(`<div id="html_9f7e59229a84ade63e5c028936f67017" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Djibouti</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Djibouti</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>4,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_04fc7097e78c5c94fed57ffa1a067f33.setContent(html_9f7e59229a84ade63e5c028936f67017);
+            
+        
+
+        circle_marker_88487fe998b4cdfe18714390381b4625.bindPopup(popup_04fc7097e78c5c94fed57ffa1a067f33)
+        ;
+
+        
+    
+    
+            circle_marker_88487fe998b4cdfe18714390381b4625.bindTooltip(
+                `<div>
+                     Djibouti — 4000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_8f2afc9b848e325b9101c90bb3bc139c = L.circleMarker(
+                [11.825138, 42.590275],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_fb1d8dd945b7051fe5a44b0b0bda3dbe = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_1a65ba0e959f2fe6a27617cc777e801d = $(`<div id="html_1a65ba0e959f2fe6a27617cc777e801d" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Djibouti</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Djibouti</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>4,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_fb1d8dd945b7051fe5a44b0b0bda3dbe.setContent(html_1a65ba0e959f2fe6a27617cc777e801d);
+            
+        
+
+        circle_marker_8f2afc9b848e325b9101c90bb3bc139c.bindPopup(popup_fb1d8dd945b7051fe5a44b0b0bda3dbe)
+        ;
+
+        
+    
+    
+            circle_marker_8f2afc9b848e325b9101c90bb3bc139c.bindTooltip(
+                `<div>
+                     Djibouti — 4000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_2534eb1a1eeec392421942c9539f97d9 = L.circleMarker(
+                [17.607789, 8.081666],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_611e31ba94e042d1a5cc618b622ee80a = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_7c4de46017a320604056ab7746f640d2 = $(`<div id="html_7c4de46017a320604056ab7746f640d2" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Niger</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Niger</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>4,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_611e31ba94e042d1a5cc618b622ee80a.setContent(html_7c4de46017a320604056ab7746f640d2);
+            
+        
+
+        circle_marker_2534eb1a1eeec392421942c9539f97d9.bindPopup(popup_611e31ba94e042d1a5cc618b622ee80a)
+        ;
+
+        
+    
+    
+            circle_marker_2534eb1a1eeec392421942c9539f97d9.bindTooltip(
+                `<div>
+                     Niger — 4000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_bec5be85bc6a8263a746b10688f1e89b = L.circleMarker(
+                [17.607789, 8.081666],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_9f2298bf3283385b248e91bc9451a014 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_00bb157557538fa436b7073dbf35d3d1 = $(`<div id="html_00bb157557538fa436b7073dbf35d3d1" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Niger</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Niger</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>4,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_9f2298bf3283385b248e91bc9451a014.setContent(html_00bb157557538fa436b7073dbf35d3d1);
+            
+        
+
+        circle_marker_bec5be85bc6a8263a746b10688f1e89b.bindPopup(popup_9f2298bf3283385b248e91bc9451a014)
+        ;
+
+        
+    
+    
+            circle_marker_bec5be85bc6a8263a746b10688f1e89b.bindTooltip(
+                `<div>
+                     Niger — 4000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_5bf6a02356428ffed5fe63633f4e52ce = L.circleMarker(
+                [12.087083, 15.0148322],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_4e2d86fad98e5fba322695db4b0e3dca = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_32b6f16ec39a8a6a520cb2d0d43ba4c2 = $(`<div id="html_32b6f16ec39a8a6a520cb2d0d43ba4c2" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Cameroon</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Kousseri, Cameroon</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>2,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_4e2d86fad98e5fba322695db4b0e3dca.setContent(html_32b6f16ec39a8a6a520cb2d0d43ba4c2);
+            
+        
+
+        circle_marker_5bf6a02356428ffed5fe63633f4e52ce.bindPopup(popup_4e2d86fad98e5fba322695db4b0e3dca)
+        ;
+
+        
+    
+    
+            circle_marker_5bf6a02356428ffed5fe63633f4e52ce.bindTooltip(
+                `<div>
+                     Cameroon — 2000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_a028c19e85f067e9fd1f76564e7ce65b = L.circleMarker(
+                [12.087083, 15.0148322],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_0df35e0eb2705067761fbfac73927fa6 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_dbf6f1f630753192b4a4a5246670d543 = $(`<div id="html_dbf6f1f630753192b4a4a5246670d543" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Cameroon</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Kousseri, Cameroon</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>2,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_0df35e0eb2705067761fbfac73927fa6.setContent(html_dbf6f1f630753192b4a4a5246670d543);
+            
+        
+
+        circle_marker_a028c19e85f067e9fd1f76564e7ce65b.bindPopup(popup_0df35e0eb2705067761fbfac73927fa6)
+        ;
+
+        
+    
+    
+            circle_marker_a028c19e85f067e9fd1f76564e7ce65b.bindTooltip(
+                `<div>
+                     Cameroon — 2000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_fc7f1dfb9d922650c08739240f2b3599 = L.circleMarker(
+                [8.5263486, 39.2583293],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_b6e1d500d8827c861967fb3e02538ea4 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_a7c58e681e75c15ff513b297d5e8dea1 = $(`<div id="html_a7c58e681e75c15ff513b297d5e8dea1" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ethiopia</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Adama, Ethiopia</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_b6e1d500d8827c861967fb3e02538ea4.setContent(html_a7c58e681e75c15ff513b297d5e8dea1);
+            
+        
+
+        circle_marker_fc7f1dfb9d922650c08739240f2b3599.bindPopup(popup_b6e1d500d8827c861967fb3e02538ea4)
+        ;
+
+        
+    
+    
+            circle_marker_fc7f1dfb9d922650c08739240f2b3599.bindTooltip(
+                `<div>
+                     Ethiopia — 1000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_9cda5324a063713360df24109e15078f = L.circleMarker(
+                [8.5263486, 39.2583293],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_7259c59eaf648ce1ca599a34b5172df9 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6000451ca66697dcb1a4b0655c16f490 = $(`<div id="html_6000451ca66697dcb1a4b0655c16f490" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ethiopia</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Adama, Ethiopia</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_7259c59eaf648ce1ca599a34b5172df9.setContent(html_6000451ca66697dcb1a4b0655c16f490);
+            
+        
+
+        circle_marker_9cda5324a063713360df24109e15078f.bindPopup(popup_7259c59eaf648ce1ca599a34b5172df9)
+        ;
+
+        
+    
+    
+            circle_marker_9cda5324a063713360df24109e15078f.bindTooltip(
+                `<div>
+                     Ethiopia — 1000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_dab191de075430655aa0e73c84f9487a = L.circleMarker(
+                [-6.1629685, 39.1865491],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_8e1c713a58bc9060dd891e7588d982c7 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_866aaa4f47ba56b2db062f4219d3bb77 = $(`<div id="html_866aaa4f47ba56b2db062f4219d3bb77" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Shangani, Zanzibar, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>High Impact</b></div>           <div>Total Qur'an: <b>8,680</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_8e1c713a58bc9060dd891e7588d982c7.setContent(html_866aaa4f47ba56b2db062f4219d3bb77);
+            
+        
+
+        circle_marker_dab191de075430655aa0e73c84f9487a.bindPopup(popup_8e1c713a58bc9060dd891e7588d982c7)
+        ;
+
+        
+    
+    
+            circle_marker_dab191de075430655aa0e73c84f9487a.bindTooltip(
+                `<div>
+                     Tanzania — 8680 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_756d81121f493134b3c860a87ace07ca = L.circleMarker(
+                [-6.1629685, 39.1865491],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_de57d80e6a4a4e2606bf5922e73d8b85 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_54f21d941051cd0c7df19141b95ac702 = $(`<div id="html_54f21d941051cd0c7df19141b95ac702" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Shangani, Zanzibar, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>High Impact</b></div>           <div>Total Qur'an: <b>8,680</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_de57d80e6a4a4e2606bf5922e73d8b85.setContent(html_54f21d941051cd0c7df19141b95ac702);
+            
+        
+
+        circle_marker_756d81121f493134b3c860a87ace07ca.bindPopup(popup_de57d80e6a4a4e2606bf5922e73d8b85)
+        ;
+
+        
+    
+    
+            circle_marker_756d81121f493134b3c860a87ace07ca.bindTooltip(
+                `<div>
+                     Tanzania — 8680 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_520ab1e8e071081942385e83dcbdf3d2 = L.circleMarker(
+                [-6.9275886, 39.1335549],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_166eb0c7e507fd4b08a0fdd01c9439ff = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_beaab25c37f3ed84169a5ffbd106a340 = $(`<div id="html_beaab25c37f3ed84169a5ffbd106a340" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ilala, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,650</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_166eb0c7e507fd4b08a0fdd01c9439ff.setContent(html_beaab25c37f3ed84169a5ffbd106a340);
+            
+        
+
+        circle_marker_520ab1e8e071081942385e83dcbdf3d2.bindPopup(popup_166eb0c7e507fd4b08a0fdd01c9439ff)
+        ;
+
+        
+    
+    
+            circle_marker_520ab1e8e071081942385e83dcbdf3d2.bindTooltip(
+                `<div>
+                     Tanzania — 1650 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_d4150277c52629623c894718ee0b7be7 = L.circleMarker(
+                [-6.9275886, 39.1335549],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_e7732016b77a54e49d0238fd5a972c89 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_ab71835c4cc87a3c67d6878e4dc3654a = $(`<div id="html_ab71835c4cc87a3c67d6878e4dc3654a" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ilala, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,650</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_e7732016b77a54e49d0238fd5a972c89.setContent(html_ab71835c4cc87a3c67d6878e4dc3654a);
+            
+        
+
+        circle_marker_d4150277c52629623c894718ee0b7be7.bindPopup(popup_e7732016b77a54e49d0238fd5a972c89)
+        ;
+
+        
+    
+    
+            circle_marker_d4150277c52629623c894718ee0b7be7.bindTooltip(
+                `<div>
+                     Tanzania — 1650 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_91aa75c06086d91158f9923b007e749d = L.circleMarker(
+                [-6.135729500000001, 39.3621196],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_261d32f1bdb68b431cdfb86567943b8e = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_1e6d7935d5be3f62224ad87e76aba756 = $(`<div id="html_1e6d7935d5be3f62224ad87e76aba756" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Unguja, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>3,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_261d32f1bdb68b431cdfb86567943b8e.setContent(html_1e6d7935d5be3f62224ad87e76aba756);
+            
+        
+
+        circle_marker_91aa75c06086d91158f9923b007e749d.bindPopup(popup_261d32f1bdb68b431cdfb86567943b8e)
+        ;
+
+        
+    
+    
+            circle_marker_91aa75c06086d91158f9923b007e749d.bindTooltip(
+                `<div>
+                     Tanzania — 3000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_2a91accd8b94233ec5d8c1dd94e4e1f2 = L.circleMarker(
+                [-6.135729500000001, 39.3621196],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_6db367a04b423447dd97ac246439f6ca = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_2a1209d21c90e53c3a4738de215cad02 = $(`<div id="html_2a1209d21c90e53c3a4738de215cad02" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Tanzania</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Unguja, Tanzania</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>3,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_6db367a04b423447dd97ac246439f6ca.setContent(html_2a1209d21c90e53c3a4738de215cad02);
+            
+        
+
+        circle_marker_2a91accd8b94233ec5d8c1dd94e4e1f2.bindPopup(popup_6db367a04b423447dd97ac246439f6ca)
+        ;
+
+        
+    
+    
+            circle_marker_2a91accd8b94233ec5d8c1dd94e4e1f2.bindTooltip(
+                `<div>
+                     Tanzania — 3000 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_7850c4af0c0af07a931a2d39e129485b = L.circleMarker(
+                [43.8598677, 18.4128265],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_6ca375830135f93bb862507b8844f85e = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6e58dc79ec0e6ba9b88ab209c080ec1f = $(`<div id="html_6e58dc79ec0e6ba9b88ab209c080ec1f" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Sarajevo, Bosnia</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Jezero, 71000 Sarajevo, Bosnia and Herzegovina</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,650</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_6ca375830135f93bb862507b8844f85e.setContent(html_6e58dc79ec0e6ba9b88ab209c080ec1f);
+            
+        
+
+        circle_marker_7850c4af0c0af07a931a2d39e129485b.bindPopup(popup_6ca375830135f93bb862507b8844f85e)
+        ;
+
+        
+    
+    
+            circle_marker_7850c4af0c0af07a931a2d39e129485b.bindTooltip(
+                `<div>
+                     Sarajevo, Bosnia — 1650 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_c4acfd967ab629ae101b3c58d6b8c99c = L.circleMarker(
+                [43.8598677, 18.4128265],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_b2cb230e629f7f2339aa4c267006ebe9 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_284ca354f650d56ba1fa7284ff471e6f = $(`<div id="html_284ca354f650d56ba1fa7284ff471e6f" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Sarajevo, Bosnia</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Jezero, 71000 Sarajevo, Bosnia and Herzegovina</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Moderate</b></div>           <div>Total Qur'an: <b>1,650</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_b2cb230e629f7f2339aa4c267006ebe9.setContent(html_284ca354f650d56ba1fa7284ff471e6f);
+            
+        
+
+        circle_marker_c4acfd967ab629ae101b3c58d6b8c99c.bindPopup(popup_b2cb230e629f7f2339aa4c267006ebe9)
+        ;
+
+        
+    
+    
+            circle_marker_c4acfd967ab629ae101b3c58d6b8c99c.bindTooltip(
+                `<div>
+                     Sarajevo, Bosnia — 1650 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_af82bb7f7d536852ea758be6dd542a19 = L.circleMarker(
+                [12.3714277, -1.5196603],
+                {"bubblingMouseEvents": true, "color": "#E3A821", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#FFD55A", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 9, "stroke": true, "weight": 2}
+            ).addTo(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+        
+    
+        var popup_79c243c6d6c71fa83dd7aedc0f3a2de8 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_deafba578dbb52dabcf438233be8803d = $(`<div id="html_deafba578dbb52dabcf438233be8803d" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>250</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_79c243c6d6c71fa83dd7aedc0f3a2de8.setContent(html_deafba578dbb52dabcf438233be8803d);
+            
+        
+
+        circle_marker_af82bb7f7d536852ea758be6dd542a19.bindPopup(popup_79c243c6d6c71fa83dd7aedc0f3a2de8)
+        ;
+
+        
+    
+    
+            circle_marker_af82bb7f7d536852ea758be6dd542a19.bindTooltip(
+                `<div>
+                     Ouagadougou, Burkina Faso — 250 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            marker_cluster_38407f48bfb0ef1004c5827501774c97.addTo(feature_group_42780829d8b3ea0b2243a12a6e93e853);
+        
+    
+            var marker_5002f803cc2c3508d87c3fda6b937ea2 = L.marker(
+                [12.3714277, -1.5196603],
+                {
+}
+            ).addTo(map_650a101fa46c8081aa4ee9eed624a32a);
+        
+    
+            var div_icon_2b82740ae3d719b67f3eb7915b778c74 = L.divIcon({
+  "html": "\u003cdiv class=\"pulse-pin\" title=\"Launching 22 Dec 2025\"\u003e\u003c/div\u003e",
+  "iconSize": [24, 24],
+  "iconAnchor": [12, 12],
+  "className": "empty",
+});
+            marker_5002f803cc2c3508d87c3fda6b937ea2.setIcon(div_icon_2b82740ae3d719b67f3eb7915b778c74);
+        
+    
+        var popup_e451c61206b8f4b13ed179186b153b99 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_acba9da6779c7dc94e98a9be0608d1d0 = $(`<div id="html_acba9da6779c7dc94e98a9be0608d1d0" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>250</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                popup_e451c61206b8f4b13ed179186b153b99.setContent(html_acba9da6779c7dc94e98a9be0608d1d0);
+            
+        
+
+        marker_5002f803cc2c3508d87c3fda6b937ea2.bindPopup(popup_e451c61206b8f4b13ed179186b153b99)
+        ;
+
+        
+    
+    
+            marker_5002f803cc2c3508d87c3fda6b937ea2.bindTooltip(
+                `<div>
+                     Ouagadougou, Burkina Faso — 250 Qur'an
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+</script>
+</html>
