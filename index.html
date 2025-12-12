@@ -50,6 +50,28 @@
   filter: grayscale(100%) sepia(40%) hue-rotate(330deg) saturate(70%) brightness(90%);
 }
 .leaflet-control, .leaflet-control * { filter: none !important; }
+/* Table grid fixes: keep columns aligned and wrap content predictably */
+.tbl{ table-layout: fixed; width: 100%; }
+.tbl th, .tbl td { white-space: normal; word-break: break-word; overflow-wrap: anywhere; padding: 10px 12px; vertical-align: middle; }
+.tbl thead th { white-space: nowrap; }
+.tbl td.num, .tbl thead th.num { text-align: right; }
+.tbl td.placeholder {
+  position: relative;
+  color: transparent; /* hide the literal dash so we replace with a full-width dashed line */
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+}
+.tbl td.placeholder::before {
+  content: "";
+  display: block;
+  height: 2px;
+  width: 100%;
+  margin: 0;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0 8px, transparent 8px 16px);
+}
 </style>
     
 <div id="siteHeader" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
@@ -443,6 +465,12 @@
   <div class="dash-title">Project Locations</div>
   <div class="table-wrap">
     <table class="tbl" id="impactTable">
+      <colgroup>
+        <col style="width:14%" />
+        <col style="width:24%" />
+        <col style="width:48%" />
+        <col style="width:14%" />
+      </colgroup>
       <thead>
         <tr>
           <th>Impact</th>
