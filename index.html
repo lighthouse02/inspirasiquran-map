@@ -116,6 +116,40 @@
     window.addEventListener('resize', setHeaderHeight);
   })();
 </script>
+    <style>
+      /* Activity feed styles (match table width/appearance) */
+      .activity-wrap { margin-top:14px; }
+      .activity-table-wrap { background:#171a1f; border-radius:12px; padding:6px; box-shadow: 0 6px 22px rgba(0,0,0,.35); }
+      .activity-feed { list-style:none; margin:0; padding:0; width:100%; }
+      .activity-item { padding:14px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:transparent; transition: background .12s ease, transform .08s ease; }
+      .activity-item + .activity-item { margin-top:8px; }
+      .activity-item:hover { background: rgba(190,170,141,.03); transform: translateY(-1px); }
+      .activity-left { display:flex; flex-direction:column; gap:6px; }
+      .activity-main { color:#f4f2ee; font-weight:700; font-size:15px; }
+      .activity-sub, .activity-sub .activity-date, .activity-sub .activity-count { color:#cfc6b8; font-size:13px; }
+      .activity-right { min-width:120px; display:flex; justify-content:flex-end; }
+      .activity-location { display:inline-flex; align-items:center; gap:8px; color:#f4f2ee; font-weight:600; }
+      .location-dot { width:12px; height:12px; border-radius:50%; background:#ff4d4d; box-shadow:0 0 10px rgba(255,77,77,0.45); animation: feed-blink 1.2s linear infinite; }
+      @keyframes feed-blink { 0% { opacity:1; transform:scale(1);} 50% { opacity:.25; transform:scale(.9);} 100% { opacity:1; transform:scale(1);} }
+      /* compact mobile layout */
+      @media (max-width:720px){ .activity-item { flex-direction:column; align-items:flex-start; } .activity-right{ width:100%; justify-content:flex-start; margin-top:6px } }
+    </style>
+
+    <script>
+      // Helper: add an activity entry to the feed. Example usage:
+      // addActivity('Quran Night 2025', '13 December 2025', '450 Mushaf', 'Nilai');
+      function addActivity(title, dateStr, count, location){
+        var ul = document.getElementById('activityFeed');
+        if(!ul) return;
+        var li = document.createElement('li'); li.className = 'activity-item';
+        li.innerHTML = `<div class="activity-left"><div class="activity-main">${title}</div><div class="activity-sub"><span class="activity-date">${dateStr}</span> &nbsp;|&nbsp; <span class="activity-count">${count}</span></div></div>` +
+                       `<div class="activity-right"><div class="activity-location"><span class="location-dot" title="${location}"></span> ${location}</div></div>`;
+        // insert at top
+        ul.insertBefore(li, ul.firstChild);
+      }
+
+      // Example: keep initial static item (already in HTML). You can call addActivity() to add more.
+    </script>
     
 <script>
 (function() {
@@ -193,6 +227,25 @@
 </style>
     
             <div class="folium-map" id="map_650a101fa46c8081aa4ee9eed624a32a" ></div>
+
+            <!-- Activity Feed: placed after the map and before Project Locations -->
+            <div class="dash-wrap activity-wrap" aria-label="Activity Feed">
+              <div class="dash-title">Activity Feed</div>
+              <div class="table-wrap activity-table-wrap">
+                <ul class="activity-feed" id="activityFeed">
+                  <!-- Example item (you can add items dynamically via JS) -->
+                  <li class="activity-item" data-loc="Nilai">
+                    <div class="activity-left">
+                      <div class="activity-main"><b>Quran Night 2025</b></div>
+                      <div class="activity-sub"><span class="activity-date">13 December 2025</span> &nbsp;|&nbsp; <span class="activity-count">450 Mushaf</span></div>
+                    </div>
+                    <div class="activity-right">
+                      <div class="activity-location"><span class="location-dot" title="Nilai"></span> Nilai</div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
         
     
 <style>
@@ -401,12 +454,10 @@
     border-radius: 8px;
     box-shadow: 0 6px 18px rgba(0,0,0,.35);
   }
-  .leaflet-tooltip-left:before,
-  .leaflet-tooltip-right:before,
-  .leaflet-tooltip-top:before,
-  .leaflet-tooltip-bottom:before {
-    border-*-color: rgba(0,0,0,.85);  /* all directions get dark tip */
-  }
+  .leaflet-tooltip-left:before { border-right-color: rgba(0,0,0,.85); }
+  .leaflet-tooltip-right:before { border-left-color: rgba(0,0,0,.85); }
+  .leaflet-tooltip-top:before { border-bottom-color: rgba(0,0,0,.85); }
+  .leaflet-tooltip-bottom:before { border-top-color: rgba(0,0,0,.85); }
 </style>
     
 <style>
