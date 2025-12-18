@@ -121,11 +121,19 @@
       .activity-wrap { margin-top:14px; }
       .activity-table-wrap { background:#171a1f; border-radius:12px; padding:6px; box-shadow: 0 6px 22px rgba(0,0,0,.35); }
       .activity-feed { list-style:none; margin:0; padding:0; width:100%; }
-      .activity-item { padding:14px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:transparent; transition: background .12s ease, transform .08s ease; }
+      .activity-item { padding:14px; border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, rgba(30,34,38,0.6), rgba(22,24,27,0.6)); border:1px solid rgba(190,170,141,0.06); transition: background .12s ease, transform .08s ease; }
       .activity-item + .activity-item { margin-top:8px; }
       .activity-item:hover { background: rgba(190,170,141,.03); transform: translateY(-1px); }
-      .activity-left { display:flex; flex-direction:column; gap:6px; }
+      .activity-avatar { width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; background:linear-gradient(135deg,#3b82f6,#7c3aed); color:white; box-shadow: 0 8px 20px rgba(0,0,0,.45); margin-right:12px }
+      .activity-left { display:flex; flex-direction:column; gap:6px; flex:1; min-width:0 }
       .activity-main { color:#f4f2ee; font-weight:700; font-size:15px; }
+      .activity-title { position:relative; cursor:default; }
+      /* Floating tooltip (attached to body) to avoid clipping behind panel */
+      .activity-floating-tooltip{
+        position:absolute; left:0; top:0; transform:translateY(6px);
+        background:rgba(27,30,34,.98); color:#f4f2ee; padding:8px 10px; border-radius:8px; font-size:13px; box-shadow:0 8px 20px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .12s ease, transform .12s ease; z-index:2147483647;
+        white-space:nowrap;
+      }
       .activity-sub, .activity-sub .activity-date, .activity-sub .activity-count { color:#cfc6b8; font-size:13px; }
       .activity-right { min-width:120px; display:flex; justify-content:flex-end; }
       .activity-location { display:inline-flex; align-items:center; gap:8px; color:#f4f2ee; font-weight:600; }
@@ -137,18 +145,61 @@
 
     <script>
       // Helper: add an activity entry to the feed. Example usage:
-      // addActivity('Quran Night 2025', '13 December 2025', '450 Mushaf', 'Nilai');
-      function addActivity(title, dateStr, count, location){
+      // addActivity('Prep: Quran printing & logistics', '13 December 2025', '8,000 Mushaf', 'Isparta, Turkiye', '🏭');
+      function addActivity(title, dateStr, count, location, avatar){
         var ul = document.getElementById('activityFeed');
         if(!ul) return;
         var li = document.createElement('li'); li.className = 'activity-item';
-        li.innerHTML = `<div class="activity-left"><div class="activity-main">${title}</div><div class="activity-sub"><span class="activity-date">${dateStr}</span> &nbsp;|&nbsp; <span class="activity-count">${count}</span></div></div>` +
-                       `<div class="activity-right"><div class="activity-location"><span class="location-dot" title="${location}"></span> ${location}</div></div>`;
+        var av = avatar ? avatar : '📖';
+        li.innerHTML = `<div style="display:flex;align-items:center;min-width:0"><div class=\"activity-avatar\">${av}</div><div class=\"activity-left\"><div class=\"activity-main\"><span class=\"activity-title\" data-tooltip=\"${location} · ${count}\">${title}</span></div><div class=\"activity-sub\"><span class=\"activity-date\">${dateStr}</span></div></div></div>` +
+                       `<div class=\"activity-right\"><div class=\"activity-location\"><span class=\"location-dot\" title=\"${location}\"></span> ${location}</div></div>`;
         // insert at top
         ul.insertBefore(li, ul.firstChild);
       }
 
       // Example: keep initial static item (already in HTML). You can call addActivity() to add more.
+    </script>
+    <script>
+      // Floating tooltip logic: attach a tooltip element to body so it won't be clipped by parents
+      (function(){
+        var currentTip = null;
+        function removeTip(){ if(currentTip && currentTip.parentNode){ currentTip.parentNode.removeChild(currentTip); currentTip = null; } }
+        function showTip(target){
+          var text = target.getAttribute('data-tooltip');
+          if(!text) return;
+          removeTip();
+          var tip = document.createElement('div'); tip.className = 'activity-floating-tooltip'; tip.textContent = text;
+          document.body.appendChild(tip);
+          // position
+          var rect = target.getBoundingClientRect();
+          var tipRect = tip.getBoundingClientRect();
+          var left = rect.left + rect.width/2 - tipRect.width/2;
+          left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+          var top = rect.top - tipRect.height - 10;
+          if(top < 8) top = rect.bottom + 10;
+          tip.style.left = left + 'px';
+          tip.style.top = top + 'px';
+          // animate in
+          requestAnimationFrame(function(){ tip.style.opacity = '1'; tip.style.transform = 'translateY(0)'; });
+          currentTip = tip;
+        }
+
+        // event delegation: mouseover / mouseout for elements with class 'activity-title'
+        document.addEventListener('mouseover', function(e){
+          var t = e.target.closest && e.target.closest('.activity-title');
+          if(t) showTip(t);
+        });
+        document.addEventListener('mouseout', function(e){
+          var t = e.relatedTarget;
+          // remove whenever the mouse leaves the title area
+          var from = e.target.closest && e.target.closest('.activity-title');
+          if(from && (!t || !t.closest || !t.closest('.activity-title'))){ removeTip(); }
+        });
+
+        // Also remove tip on scroll or resize to avoid stale positioning
+        window.addEventListener('scroll', function(){ removeTip(); }, true);
+        window.addEventListener('resize', function(){ removeTip(); });
+      })();
     </script>
     
 <script>
@@ -234,13 +285,16 @@
               <div class="table-wrap activity-table-wrap">
                 <ul class="activity-feed" id="activityFeed">
                   <!-- Example item (you can add items dynamically via JS) -->
-                  <li class="activity-item" data-loc="Nilai">
-                    <div class="activity-left">
-                      <div class="activity-main"><b>Quran Night 2025</b></div>
-                      <div class="activity-sub"><span class="activity-date">13 December 2025</span> &nbsp;|&nbsp; <span class="activity-count">450 Mushaf</span></div>
+                  <li class="activity-item" data-loc="Isparta, Turkiye">
+                    <div style="display:flex;align-items:center;min-width:0">
+                      <div class="activity-avatar">📖</div>
+                      <div class="activity-left">
+                        <div class="activity-main"><span class="activity-title" data-tooltip="Isparta, Turkiye · 8,000 Mushaf">Prep: Quran printing & logistics</span></div>
+                        <div class="activity-sub"><span class="activity-date">18 December 2025</span></div>
+                      </div>
                     </div>
                     <div class="activity-right">
-                      <div class="activity-location"><span class="location-dot" title="Nilai"></span> Nilai</div>
+                      <div class="activity-location"><span class="location-dot" title="Isparta, Turkiye"></span> Isparta, Turkiye</div>
                     </div>
                   </li>
                 </ul>
@@ -503,7 +557,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Tanzania</td><td>Chaani, Shangani, Potoa, Kidoti</td><td class="num">8,680</td></tr><tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Chad</td><td class="placeholder">—</td><td class="num">5,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Djibouti</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Niger</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Dar Es Salaam, Pulau Zanzibar</td><td class="num">3,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Cameroon</td><td>Kousseri, Youndi</td><td class="num">2,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Sarajevo, Bosnia</td><td>Masjid Ship, Masjid Jezero, Masjid Sedrenik</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Ilala, Temeke</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Ethiopia</td><td>Adama, Odomia</td><td class="num">1,000</td></tr><tr class='active-row'><td><span class="chip chip--active" style="--chip:#ff6b6b">Active</span></td><td><span class="pulse-dot" title="Launch: 22 Dec 2025"></span>Ouagadougou, Burkina Faso</td><td>Madrasah Izharuddin, Kombissiri</td><td class="num">250</td></tr>
+        <tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Tanzania</td><td>Chaani, Shangani, Potoa, Kidoti</td><td class="num">8,680</td></tr><tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Chad</td><td class="placeholder">—</td><td class="num">5,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Djibouti</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Niger</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Dar Es Salaam, Pulau Zanzibar</td><td class="num">3,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Cameroon</td><td>Kousseri, Youndi</td><td class="num">2,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Sarajevo, Bosnia</td><td>Masjid Ship, Masjid Jezero, Masjid Sedrenik</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Ilala, Temeke</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Ethiopia</td><td>Adama, Odomia</td><td class="num">1,000</td></tr><tr class='active-row'><td><span class="chip chip--active" style="--chip:#ff6b6b">Active</span></td><td><span class="pulse-dot" title="Launch: 22 Dec 2025"></span>Ouagadougou, Burkina Faso</td><td>Madrasah Izharuddin, Kombissiri</td><td class="num">8,000</td></tr>
       </tbody>
     </table>
   </div>
@@ -548,6 +602,24 @@
     padding: 3px 10px !important;
     box-shadow: 0 0 0 1px rgba(255,107,107,.25) inset;
   }
+</style>
+
+<style>
+  /* Highlight the active project row with brand colors */
+  .tbl tbody tr.active-row {
+    background: linear-gradient(90deg, rgba(190,170,141,0.06), rgba(190,170,141,0.02));
+    border-left: 6px solid #BEAA8D; /* brand accent */
+    box-shadow: 0 8px 24px rgba(190,170,141,0.06) inset;
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  }
+  .tbl tbody tr.active-row td { color: #f7efe0; }
+  .tbl tbody tr.active-row:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(190,170,141,0.12), 0 2px 6px rgba(0,0,0,0.35) inset;
+    background: linear-gradient(90deg, rgba(190,170,141,0.10), rgba(190,170,141,0.04));
+  }
+  /* Make the pulse-dot more prominent for active row */
+  .tbl tbody tr.active-row .pulse-dot{ box-shadow:0 0 0 6px rgba(255,107,107,0.06); }
 </style>
     
 <script>
@@ -1426,9 +1498,9 @@
   "maxWidth": 320,
 });
 
-        
+
             
-                var html_deafba578dbb52dabcf438233be8803d = $(`<div id="html_deafba578dbb52dabcf438233be8803d" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>250</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                var html_deafba578dbb52dabcf438233be8803d = $(`<div id="html_deafba578dbb52dabcf438233be8803d" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>8,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
                 popup_79c243c6d6c71fa83dd7aedc0f3a2de8.setContent(html_deafba578dbb52dabcf438233be8803d);
             
         
@@ -1441,7 +1513,7 @@
     
             circle_marker_af82bb7f7d536852ea758be6dd542a19.bindTooltip(
                 `<div>
-                     Ouagadougou, Burkina Faso — 250 Qur'an
+                     Ouagadougou, Burkina Faso — 8,000 Qur'an
                  </div>`,
                 {
   "sticky": true,
@@ -1474,7 +1546,7 @@
 
         
             
-                var html_acba9da6779c7dc94e98a9be0608d1d0 = $(`<div id="html_acba9da6779c7dc94e98a9be0608d1d0" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>250</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
+                var html_acba9da6779c7dc94e98a9be0608d1d0 = $(`<div id="html_acba9da6779c7dc94e98a9be0608d1d0" style="width: 100.0%; height: 100.0%;">     <div style="width:280px;background:#1b1e22;color:#f4f2ee;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);overflow:hidden;border:1px solid rgba(190,170,141,.35);">              <div style="padding:12px 12px 8px 12px;">         <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Ouagadougou, Burkina Faso</div>         <div style="opacity:.7;font-size:12px;margin-bottom:8px;">Ouagadougou, Burkina Faso</div>         <div style="display:flex;gap:14px;font-size:12px;margin-bottom:6px;">           <div>Impact: <b>Active</b></div>           <div>Total Qur'an: <b>8,000</b></div>         </div>         <a href="" target="_blank" style="display:inline-block;margin-top:4px;background:#BEAA8D;color:#111315;font-weight:700;padding:8px 10px;border-radius:8px;text-decoration:none;">VIEW DETAILS</a>       </div>     </div>     </div>`)[0];
                 popup_e451c61206b8f4b13ed179186b153b99.setContent(html_acba9da6779c7dc94e98a9be0608d1d0);
             
         
@@ -1487,7 +1559,7 @@
     
             marker_5002f803cc2c3508d87c3fda6b937ea2.bindTooltip(
                 `<div>
-                     Ouagadougou, Burkina Faso — 250 Qur'an
+                     Ouagadougou, Burkina Faso — 8,000 Qur'an
                  </div>`,
                 {
   "sticky": true,
@@ -1570,8 +1642,9 @@
 
         var pathPts = greatCircle(start,end,240);
 
-        // Draw the full path (curved look can be improved, but this is simple)
+        // Draw the full path (curved look) and a progress line for the flown portion
         var flightLine = L.polyline(pathPts, { className: 'flight-path', pane: 'overlayPane' }).addTo(map);
+        var progressLine = L.polyline([pathPts[0]], { color: '#7bdff6', weight: 4, opacity: 0.95, pane: 'overlayPane' }).addTo(map);
 
         // Create plane icon (SVG) and marker
         var planeSvg = `
@@ -1587,23 +1660,35 @@
         var animId = null;
         var i = 0, speed = 0.8; // points per frame
 
+        // Animate only to quarter-way point and then pause there
+        var quarterIndex = Math.floor(pathPts.length * 0.25);
         function animate(){
-          i = (i + speed) % pathPts.length;
+          i = Math.min(i + speed, quarterIndex);
           var idx = Math.floor(i);
           var cur = L.latLng(pathPts[idx]);
           var nextIdx = Math.min(idx+1, pathPts.length-1);
           var next = L.latLng(pathPts[nextIdx]);
           planeMarker.setLatLng(cur);
+          // update progress line to current point
+          progressLine.setLatLngs(pathPts.slice(0, idx+1));
           var brg = bearing(cur,next);
           var node = planeMarker.getElement();
           if(node){ node.style.transform = 'translate(-50%, -50%) rotate(' + brg + 'deg)'; }
-          animId = requestAnimationFrame(animate);
+          if (idx < quarterIndex) {
+            animId = requestAnimationFrame(animate);
+          } else {
+            // reached quarter waypoint; stop animation
+            cancelAnimationFrame(animId || 0);
+            animId = null;
+            // optionally mark quarter point
+            L.circleMarker(cur, { radius:6, color:'#ff6b6b', fill:true, fillOpacity:0.9 }).addTo(map).bindTooltip('Quarterway stop');
+          }
         }
 
         function startAnimationIfDue(){
           var now = new Date();
           if(now >= departDate){
-            // start flying
+            // start flying (towards quarter point)
             if(!animId) animate();
           } else {
             // keep plane at origin and note departure date
@@ -1619,8 +1704,27 @@
         planeMarker.setLatLng(pathPts[0]);
         startAnimationIfDue();
 
-        // Ensure the map view shows whole route
-        try{ map.fitBounds(flightLine.getBounds().pad(0.25)); }catch(e){}
+        // Lock map bounds to include Malaysia (start) and all project points (feature group), fallback to route bounds
+        try{
+          var group = window['feature_group_42780829d8b3ea0b2243a12a6e93e853'] || window.feature_group_42780829d8b3ea0b2243a12a6e93e853;
+          if(group && typeof group.getBounds === 'function'){
+            var gb = group.getBounds();
+            if(gb.isValid && gb.isValid()){
+              var bounds = gb.extend(start);
+              map.fitBounds(bounds.pad(0.18));
+              map.setMaxBounds(bounds.pad(0.06));
+              map.options.maxBoundsViscosity = 1.0;
+            } else {
+              map.fitBounds(flightLine.getBounds().pad(0.25));
+              map.setMaxBounds(flightLine.getBounds().pad(0.06));
+              map.options.maxBoundsViscosity = 1.0;
+            }
+          } else {
+            map.fitBounds(flightLine.getBounds().pad(0.25));
+            map.setMaxBounds(flightLine.getBounds().pad(0.06));
+            map.options.maxBoundsViscosity = 1.0;
+          }
+        }catch(e){ console.warn('Failed to compute feature-group bounds', e); }
       });
     })();
     </script>
