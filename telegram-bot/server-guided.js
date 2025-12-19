@@ -26,6 +26,24 @@ const ACTIVITIES_PATH = path.resolve(__dirname, '..', 'activities.json');
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+// Used for menu-driven edit/delete prompts (when user taps buttons instead of typing commands).
+const pendingMenuActionByChatId = Object.create(null);
+
+// Register commands so Telegram shows them in the bot UI menu.
+try{
+  bot.setMyCommands([
+    { command: 'menu', description: 'Show buttons' },
+    { command: 'new', description: 'Create a new activity (guided)' },
+    { command: 'list', description: 'List recent activities' },
+    { command: 'help', description: 'Show help' },
+    { command: 'cancel', description: 'Cancel current session' },
+    { command: 'edit', description: 'Edit an activity by id' },
+    { command: 'delete', description: 'Delete an activity by id' }
+  ]).catch(()=>{});
+}catch(e){
+  // ignore
+}
+
 function escapeHtml(s){
   return String(s || '')
     .replace(/&/g, '&amp;')
@@ -212,6 +230,66 @@ function loadActivities(){
 }
 function saveActivities(arr){ fs.writeFileSync(ACTIVITIES_PATH, JSON.stringify(arr, null, 2), 'utf8'); }
 function isAllowed(userId){ if(ALLOWED.length===0) return true; return ALLOWED.includes(userId); }
+
+function getHelpText(){
+  return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
+During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
+}
+
+async function sendRecentList(chatId){
+  try{
+    if(dbEnabled()){
+      const rows = await listActivitiesFromDb(10);
+      const lines = rows.map(r=>{
+        const sid = String(r.id || '').slice(0, 8);
+        return `${sid} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
+      });
+      return bot.sendMessage(chatId, lines.join('\n') || 'No activities');
+    }
+    const arr = loadActivities();
+    const lines = arr.slice(-10).reverse().map(i=>`${String(i.id||'').slice(0,8)} — ${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
+    return bot.sendMessage(chatId, lines.join('\n') || 'No activities');
+  }catch(e){
+    console.error('List failed', e);
+    return bot.sendMessage(chatId, 'List failed: ' + (e.message || e));
+  }
+}
+
+async function sendMainMenu(chatId){
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: '➕ New activity', callback_data: '_menu_new' }, { text: '📋 List', callback_data: '_menu_list' }],
+      [{ text: '✏️ Edit', callback_data: '_menu_edit' }, { text: '🗑️ Delete', callback_data: '_menu_delete' }],
+      [{ text: 'ℹ️ Help', callback_data: '_menu_help' }],
+      [{ text: '✖️ Cancel', callback_data: '_menu_cancel' }]
+    ]
+  };
+  return bot.sendMessage(chatId, 'Activity bot menu:', { reply_markup: keyboard });
+}
+
+async function handleDeleteById(chatId, userId, id){
+  if(!isAllowed(userId)) return bot.sendMessage(chatId, 'Not authorized');
+  if(sessions[chatId]) return bot.sendMessage(chatId, 'You are in a session. Type /cancel first.');
+  const normalizedId = normalizeText(id);
+  if(!normalizedId) return bot.sendMessage(chatId, 'Usage: delete needs an id (get the id from /list)');
+  try{
+    if(dbEnabled()){
+      const deleted = await deleteActivityFromDb(normalizedId);
+      if(!deleted) return bot.sendMessage(chatId, 'Not found: ' + normalizedId);
+      return bot.sendMessage(chatId, 'Deleted: ' + deleted + ' (Neon)');
+    }
+    const arr = loadActivities();
+    const before = arr.length;
+    const next = arr.filter(a => String(a.id) !== normalizedId);
+    if(next.length === before) return bot.sendMessage(chatId, 'Not found: ' + normalizedId);
+    saveActivities(next);
+    return bot.sendMessage(chatId, 'Deleted: ' + normalizedId + ' (local file)');
+  }catch(e){
+    console.error('Delete failed', e);
+    return bot.sendMessage(chatId, 'Delete failed: ' + (e.message || e));
+  }
+}
+
 function makeId(){ return 'a-' + Math.random().toString(36).slice(2,10); }
 function safeDateISO(s){ const d = new Date(s); return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(); }
 // try to parse flexible user date inputs into an ISO string; return empty string if unknown
@@ -507,15 +585,12 @@ async function beginEditFlow(msg, id){
   }
 }
 
-bot.onText(/\/start/, (msg)=> bot.sendMessage(msg.chat.id, 'Activity bot ready. Use /help. Use /new for guided input.'));
-bot.onText(/\/help/, (msg)=>{
-  const help = `/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
-   During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
-  bot.sendMessage(msg.chat.id, help);
-});
+bot.onText(/\/start/, (msg)=> sendMainMenu(msg.chat.id));
+bot.onText(/\/menu/, (msg)=> sendMainMenu(msg.chat.id));
+bot.onText(/\/help/, (msg)=> bot.sendMessage(msg.chat.id, getHelpText()));
 
 bot.onText(/\/new/, (msg)=> beginGuidedFlow(msg));
-bot.onText(/\/cancel/, (msg)=>{ endSession(msg.chat.id); bot.sendMessage(msg.chat.id, 'Canceled.'); });
+bot.onText(/\/cancel/, (msg)=>{ pendingMenuActionByChatId[msg.chat.id] = null; endSession(msg.chat.id); bot.sendMessage(msg.chat.id, 'Canceled.'); });
 
 // Allow skipping steps in the guided flow from any step.
 bot.onText(/\/skip(?:@\w+)?/i, (msg)=>{
@@ -541,28 +616,7 @@ bot.onText(/\/edit\s+([\s\S]+)/i, (msg, match)=>{
 
 bot.onText(/\/delete\s+([\s\S]+)/i, (msg, match)=>{
   const chatId = msg.chat.id;
-  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
-  if(sessions[chatId]) return bot.sendMessage(chatId, 'You are in a session. Type /cancel first.');
-  const id = normalizeText(match && match[1]);
-  if(!id) return bot.sendMessage(chatId, 'Usage: /delete <id> (get the id from /list)');
-  (async function(){
-    try{
-      if(dbEnabled()){
-        const deleted = await deleteActivityFromDb(id);
-        if(!deleted) return bot.sendMessage(chatId, 'Not found: ' + id);
-        return bot.sendMessage(chatId, 'Deleted: ' + deleted + ' (Neon)');
-      }
-      const arr = loadActivities();
-      const before = arr.length;
-      const next = arr.filter(a => String(a.id) !== id);
-      if(next.length === before) return bot.sendMessage(chatId, 'Not found: ' + id);
-      saveActivities(next);
-      return bot.sendMessage(chatId, 'Deleted: ' + id + ' (local file)');
-    }catch(e){
-      console.error('Delete failed', e);
-      return bot.sendMessage(chatId, 'Delete failed: ' + (e.message || e));
-    }
-  })();
+  return handleDeleteById(chatId, msg.from.id, match && match[1]);
 });
 
 bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
@@ -588,29 +642,33 @@ bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
   })();
 });
 
-bot.onText(/\/list/, (msg)=>{
-  (async function(){
-    try{
-      if(dbEnabled()){
-        const rows = await listActivitiesFromDb(10);
-        const lines = rows.map(r=>{
-          const sid = String(r.id || '').slice(0, 8);
-          return `${sid} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
-        });
-        return bot.sendMessage(msg.chat.id, lines.join('\n') || 'No activities');
-      }
-      const arr = loadActivities();
-      const lines = arr.slice(-10).reverse().map(i=>`${String(i.id||'').slice(0,8)} — ${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
-      return bot.sendMessage(msg.chat.id, lines.join('\n')||'No activities');
-    }catch(e){
-      console.error('List failed', e);
-      return bot.sendMessage(msg.chat.id, 'List failed: ' + (e.message || e));
-    }
-  })();
-});
+bot.onText(/\/list/, (msg)=>{ sendRecentList(msg.chat.id).catch(()=>{}); });
 
 bot.on('message', async (msg)=>{
-  const chatId = msg.chat.id; if(msg.edit_date) return; const s = sessions[chatId]; if(!s) return;
+  const chatId = msg.chat.id;
+  if(msg.edit_date) return;
+
+  // Handle menu-driven prompts even when not in a guided session.
+  const pendingMenuAction = pendingMenuActionByChatId[chatId];
+  if(!sessions[chatId] && pendingMenuAction){
+    // Avoid intercepting normal commands.
+    if(msg.text && /^\/(start|help|menu|new|cancel|skip|back|edit|delete|add|list)\b/i.test(msg.text)) return;
+
+    const raw = normalizeText(msg.text);
+    pendingMenuActionByChatId[chatId] = null;
+    if(!raw) return bot.sendMessage(chatId, 'Please send the activity ID (you can get it from /list).');
+
+    if(pendingMenuAction === 'edit'){
+      return beginEditFlow({ chat: { id: chatId }, from: { id: msg.from.id } }, raw);
+    }
+    if(pendingMenuAction === 'delete'){
+      return handleDeleteById(chatId, msg.from.id, raw);
+    }
+    return;
+  }
+
+  const s = sessions[chatId];
+  if(!s) return;
   try{
     // Commands are handled by onText handlers; avoid double-processing in the step machine.
     if(msg.text && /^\/(start|help|new|cancel|skip|back|edit|delete|add|list)\b/i.test(msg.text)) return;
@@ -710,6 +768,42 @@ bot.on('callback_query', async (cq) => {
   try{
     const data = cq.data;
     const chatId = cq.message.chat.id;
+
+    // Menu actions should work even when there is no active session.
+    if(data === '_menu_new'){
+      await bot.answerCallbackQuery(cq.id, { text: 'New activity' });
+      return beginGuidedFlow({ chat: { id: chatId }, from: { id: cq.from.id } });
+    }
+    if(data === '_menu_list'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Listing…' });
+      await sendRecentList(chatId);
+      return;
+    }
+    if(data === '_menu_help'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Help' });
+      await bot.sendMessage(chatId, getHelpText());
+      return;
+    }
+    if(data === '_menu_edit'){
+      pendingMenuActionByChatId[chatId] = 'edit';
+      await bot.answerCallbackQuery(cq.id, { text: 'Edit' });
+      await bot.sendMessage(chatId, 'Send the activity ID to edit (get it from /list).', { reply_markup:{ force_reply:true } });
+      return;
+    }
+    if(data === '_menu_delete'){
+      pendingMenuActionByChatId[chatId] = 'delete';
+      await bot.answerCallbackQuery(cq.id, { text: 'Delete' });
+      await bot.sendMessage(chatId, 'Send the activity ID to delete (get it from /list).', { reply_markup:{ force_reply:true } });
+      return;
+    }
+    if(data === '_menu_cancel'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Canceled' });
+      pendingMenuActionByChatId[chatId] = null;
+      endSession(chatId);
+      await bot.sendMessage(chatId, 'Canceled.');
+      return;
+    }
+
     const session = sessions[chatId];
     if(!session){
       await bot.answerCallbackQuery(cq.id, { text: 'Session expired.' });
