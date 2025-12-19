@@ -337,6 +337,26 @@
             }
           });
           map.addControl(new MapActivityControl());
+          // keep a reference for responsive reflow (move control out of map into document flow on mobile)
+          (function(){
+            var moved = false;
+            var ctrl = null;
+            var origParent = null;
+            var origNext = null;
+            function ensureRefs(){ if(ctrl) return; ctrl = document.querySelector('.map-activity-control'); if(!ctrl) return; origParent = ctrl.parentElement; origNext = ctrl.nextSibling; }
+            function toMobileFlow(){ ensureRefs(); if(!ctrl || moved) return; // insert before map element so it sits above the map in the page flow
+              var mapEl = document.getElementById('map_650a101fa46c8081aa4ee9eed624a32a'); if(!mapEl) return; try{ origParent.removeChild(ctrl); mapEl.parentElement.insertBefore(ctrl, mapEl); ctrl.classList.add('mobile-flow'); moved = true; // slightly reduce map height
+                try{ mapEl.style.height = '54vh'; }catch(e){}
+              }catch(e){}
+            }
+            function toDesktopFlow(){ ensureRefs(); if(!ctrl || !moved) return; var mapEl = document.getElementById('map_650a101fa46c8081aa4ee9eed624a32a'); if(!mapEl) return; try{ // restore to original parent at original position
+                if(origNext) origParent.insertBefore(ctrl, origNext); else origParent.appendChild(ctrl);
+                ctrl.classList.remove('mobile-flow'); moved = false; try{ mapEl.style.height = '65vh'; }catch(e){}
+              }catch(e){}
+            }
+            function check(){ if(window.innerWidth <= 720) toMobileFlow(); else toDesktopFlow(); }
+            window.addEventListener('resize', check); setTimeout(check, 250); // run shortly after init
+          })();
           // Prefer page-level timeline if present (placed right after the map)
           var pageRange = document.getElementById('pageMapTimelineRange');
           if(pageRange){
@@ -1106,6 +1126,49 @@
   .leaflet-tooltip-right:before { border-left-color: rgba(0,0,0,.85); }
   .leaflet-tooltip-top:before { border-bottom-color: rgba(0,0,0,.85); }
   .leaflet-tooltip-bottom:before { border-top-color: rgba(0,0,0,.85); }
+</style>
+
+<style>
+  /* Mobile: float the activity feed as an overlay container on top of the map, below the header */
+  @media (max-width: 720px) {
+    .map-activity-control {
+      /* default desktop control stays inside map; mobile will move this into page flow via JS */
+      position: absolute !important;
+      left: auto !important;
+      right: 8px !important;
+      top: 8px !important;
+      z-index: 14000 !important;
+      max-width: 380px !important;
+      width: 280px !important;
+      background: rgba(17,19,21,0.95) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 20px 48px rgba(0,0,0,.6) !important;
+      padding: 10px !important;
+    }
+    .map-activity-control .mac-content { max-height: 42vh !important; overflow:auto; }
+    /* make the collapsed toggle stick to the right edge and visible */
+    .map-activity-control .map-activity-toggle { position: absolute; right: 10px; top: 8px; }
+    /* ensure page timeline sits below the floating feed when present */
+    #pageMapTimeline { margin-top: 56px; }
+    /* When control is moved into the page flow it will naturally push the map down; default map height adjusted via JS when moving control. */
+  }
+</style>
+
+<style>
+  /* Styles when the control has been moved into the page flow (mobile) */
+  .map-activity-control.mobile-flow {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    /* provide comfortable horizontal padding on small screens */
+    box-sizing: border-box !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+  }
 </style>
     
 <style>
