@@ -2,9 +2,9 @@
   "name": "inspirasiquran-activity-bot",
   "version": "0.1.0",
   "description": "Telegram bot to update activities.json for InspirasiQuran map",
-  "main": "server-guided.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server-guided.js"
+    "start": "node server.js"
   },
   "author": "",
   "license": "MIT",

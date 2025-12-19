@@ -214,23 +214,8 @@
     <script>
     // Activities loader: fetch activities.json, render feed and markers, and wire timeline filtering
       (function(){
-        // Activities backend
-        // Free setup (recommended for your constraints): point this to your cPanel API endpoint.
-        // Example: https://YOURDOMAIN.com/api/activities.php
-        // You can override without editing code by setting:
-        //   window.ACTIVITIES_URL_OVERRIDE = 'https://YOURDOMAIN.com/api/activities.php'
-        // before this script runs.
-        const ACTIVITIES_URL = (function(){
-          try{
-            if (window.ACTIVITIES_URL_OVERRIDE) return String(window.ACTIVITIES_URL_OVERRIDE);
-          }catch(e){}
-          // Local dev fallback
-          try{
-            if (location && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return '/activities.json';
-          }catch(e){}
-          // Default (Neon + Netlify Functions)
-          return '/.netlify/functions/get-activities';
-        })();
+        // switched to Netlify function backend (Neon DB) — deploy function and set DATABASE_URL in Netlify env
+        const ACTIVITIES_URL = '/.netlify/functions/get-activities';
       let feedUL = document.getElementById('activityFeed');
       // We'll create an in-map control for the feed/timeline; keep the external feed as fallback
       const activityWrap = document.querySelector('.activity-wrap');
