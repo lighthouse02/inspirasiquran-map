@@ -217,6 +217,10 @@ function safeDateISO(s){ const d = new Date(s); return isNaN(d.getTime()) ? new 
 // try to parse flexible user date inputs into an ISO string; return empty string if unknown
 function parseFlexibleDate(s){
   if(!s) return '';
+  const t = String(s).trim().toLowerCase();
+  if(t === 'now' || t === 'current' || t === 'current time' || t === 'today' || t === 'today now'){
+    return new Date().toISOString();
+  }
   // direct parse
   let d = new Date(s);
   if(!isNaN(d.getTime())) return d.toISOString();
@@ -427,7 +431,7 @@ async function promptForStep(chatId, s){
     const cur = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
     const msg = mode === 'edit'
       ? `Current date: ${cur || '(empty)'}\nSend new date/time (or /skip to keep).`
-      : 'Date/time (examples: 2025-12-20, 2025-12-20 14:30, Dec 20 2025). Leave empty to use current time.';
+      : 'Date/time (examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025). Tip: type "now" for current time.';
     return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
   }
   if(s.step === 'count'){
@@ -506,7 +510,7 @@ async function beginEditFlow(msg, id){
 bot.onText(/\/start/, (msg)=> bot.sendMessage(msg.chat.id, 'Activity bot ready. Use /help. Use /new for guided input.'));
 bot.onText(/\/help/, (msg)=>{
   const help = `/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
-   During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
+   During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
   bot.sendMessage(msg.chat.id, help);
 });
 
@@ -624,6 +628,13 @@ bot.on('message', async (msg)=>{
       const raw = (msg.text||'').trim();
       if(isSkipText(raw)){
         if(s.mode !== 'edit') s.data.date = safeDateISO('');
+        s.step = 'count';
+        return promptForStep(chatId, s);
+      }
+      // Telegram doesn't really let you send an empty message; but if we ever get blank text,
+      // treat it as "now" (current time) so the flow can continue.
+      if(!raw){
+        s.data.date = safeDateISO('');
         s.step = 'count';
         return promptForStep(chatId, s);
       }
