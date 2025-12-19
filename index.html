@@ -57,6 +57,16 @@
   filter: grayscale(100%) sepia(40%) hue-rotate(330deg) saturate(70%) brightness(90%);
 }
 .leaflet-control, .leaflet-control * { filter: none !important; }
+
+/* Make Leaflet attribution very small */
+.leaflet-control-attribution{
+  font-size: 5px !important;
+  line-height: 1.05 !important;
+  padding: 0px 2px !important;
+  opacity: 0.75;
+}
+.leaflet-control-attribution a{ font-size: 5px !important; }
+.leaflet-control-attribution svg{ width: 6px !important; height: auto !important; vertical-align: -1px; }
 </style>
     
 <div id="siteHeader" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
@@ -852,49 +862,7 @@
 })();
 </script>
 
-<style>
-  .legend-wrap{font-family:system-ui,Arial;color:#f4f2ee}
-  .legend-pill{background:rgba(17,19,21,.92);border:1px solid rgba(190,170,141,.45);
-    border-radius:999px;padding:8px 12px;font-size:13px;display:flex;gap:10px;
-    align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer}
-  .legend-pill .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
-</style>
-<style>
-  .legend-wrap{position:relative;font-family:system-ui,Arial;color:#f4f2ee}
-  .legend-pill{background:rgba(17,19,21,.92);border:1px solid rgba(190,170,141,.45);
-    border-radius:999px;padding:8px 12px;font-size:13px;display:flex;gap:10px;
-    align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer}
-  .legend-pill .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
-  
-  .legend-panel{
-    position:absolute;
-    top:100%;
-    left:0;
-    margin-top:8px;
-    background:rgba(17,19,21,.96);
-    border:1px solid rgba(190,170,141,.45);
-    border-radius:12px;
-    box-shadow:0 10px 28px rgba(0,0,0,.45);
-    padding:12px 14px;
-    width:260px;
-    z-index:9999;
-    transform-origin: top;
-    transform: scaleY(0);
-    opacity: 0;
-    transition: transform 0.25s ease, opacity 0.25s ease;
-  }
-
-  .legend-panel.show{
-    display:block;
-    transform: scaleY(1);
-    opacity: 1;
-  }
-
-  .legend-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
-  .legend-left{display:flex;align-items:center;gap:8px}
-  .legend-muted{opacity:.7;font-size:12px;margin-top:6px}
-  .leaflet-bottom.leaflet-left .legend-wrap{margin:0 0 10px 10px}
-</style>
+<!-- Legend control removed -->
     
             <div class="folium-map" id="map_650a101fa46c8081aa4ee9eed624a32a" ></div>
 
@@ -979,136 +947,28 @@
     whenMapReady(function(map){
       // Build a simple layer of invisible markers for search hits
       var searchLayer = L.layerGroup();
-      data.forEach(function(d) {
-        L.marker([d.lat, d.lng], {opacity:0}).bindTooltip(d.label).addTo(searchLayer);
-      });
-      // create search control only when plugin is loaded
-      if (L && L.Control && typeof L.Control.Search === 'function'){
+      try{
+        data.forEach(function(p){
+          if(!p || p.lat == null || p.lng == null) return;
+          L.marker([p.lat, p.lng], { title: p.label || '' , opacity: 0 }).addTo(searchLayer);
+        });
+        map.addLayer(searchLayer);
+
+        // Leaflet.Control.Search (from leaflet-control-search)
         var searchControl = new L.Control.Search({
           layer: searchLayer,
-          propertyName: 'title', // not used because we use tooltips
-          zoom: 8,
-          initial: false,
-          collapsed: false,
-          textPlaceholder: 'Search place or benefitor',
-          position: 'topleft'
+          propertyName: 'title',
+          marker: false,
+          moveToLocation: function(latlng, title, map){
+            map.setView(latlng, Math.max(6, map.getZoom()));
+          }
         });
-        try{ searchControl._input.style.width = '220px'; }catch(e){}
-        // attach layer and control to the map
-        try{ searchLayer.addTo(map); }catch(e){ map.addLayer && map.addLayer(searchLayer); }
         map.addControl(searchControl);
-      } else {
-        console.warn('Leaflet-Search plugin not found; search control skipped');
-        try{ searchLayer.addTo(map); }catch(e){ map.addLayer && map.addLayer(searchLayer); }
+      }catch(e){
+        console.warn('Search control init failed', e);
       }
     });
   })();
-</script>
-    
-<style>
-  .legend-wrap {
-    position: relative;                 /* allow absolute-positioned panel */
-    font-family: system-ui, Arial;
-    color: #f4f2ee;
-  }
-  .legend-pill {
-    background: rgba(17,19,21,.92);
-    border: 1px solid rgba(190,170,141,.45);
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 13px;
-    display:flex; align-items:center; gap:10px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.35);
-    cursor: pointer; user-select: none;
-  }
-  .legend-pill .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
-
-  /* PANEL OPENS UP */
-  .legend-panel {
-    position: absolute;
-    left: 0;
-    bottom: calc(100% + 8px);          /* <— ABOVE the pill, with 8px gap */
-    display: none;
-    background: rgba(17,19,21,.96);
-    border: 1px solid rgba(190,170,141,.45);
-    border-radius: 12px;
-    box-shadow: 0 10px 28px rgba(0,0,0,.45);
-    padding: 12px 14px; width: 260px;
-  }
-  .legend-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
-  .legend-left { display:flex; align-items:center; gap:8px; }
-  .legend-muted { opacity:.7; font-size:12px; margin-top:6px; }
-
-  /* optional: little upward caret */
-  .legend-panel::after {
-    content: "";
-    position: absolute;
-    left: 14px;
-    top: 100%;                          /* caret below the panel pointing to pill */
-    border-width: 8px;
-    border-style: solid;
-    border-color: rgba(17,19,21,.96) transparent transparent transparent;
-  }
-
-  /* nudge legend within map frame */
-  .leaflet-bottom.leaflet-left .legend-wrap { margin: 0 0 10px 10px; }
-</style>
-
-<script>
-(function() {
-  // wait until map.addControl exists
-  function whenMapReady(fn) {
-    var tries = 0;
-    (function tick() {
-      var map = window['map_650a101fa46c8081aa4ee9eed624a32a'];
-      if (map && typeof map.addControl === 'function') { fn(map); return; }
-      if (tries++ < 400) return setTimeout(tick, 25);
-      console.warn('Legend: map.addControl not ready');
-    })();
-  }
-
-  whenMapReady(function(map){
-    // Remove any previous legends to avoid duplicates (safety net)
-    Array.from(document.querySelectorAll('.legend-wrap')).forEach(function(wrap){
-      var ctrl = wrap.closest('.leaflet-control');
-      if (ctrl && ctrl.parentNode) ctrl.parentNode.removeChild(ctrl);
-    });
-
-    var LegendControl = L.Control.extend({
-      options: { position: 'bottomleft' },
-      onAdd: function() {
-        var container = L.DomUtil.create('div', 'legend-wrap');
-
-        var pill = L.DomUtil.create('div', 'legend-pill', container);
-        pill.innerHTML = `
-          <span class="dot" style="background:#ff6b6b"></span><b>2</b>
-          <span class="dot" style="background:#ffaa3b"></span><b>7</b>
-          <span class="dot" style="background:#8bdc65"></span><b>1</b>
-          <span style="opacity:.8;">Impact</span>
-        `;
-
-        var panel = L.DomUtil.create('div', 'legend-panel', container);
-        panel.innerHTML = `
-          <div style="font-weight:700; margin-bottom:6px;">Distribution Impact</div>
-          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#ff6b6b"></span> High Impact</div><div><b>2</b></div></div>
-          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#ffaa3b"></span> Moderate</div><div><b>7</b></div></div>
-          <div class="legend-row"><div class="legend-left"><span class="dot" style="background:#8bdc65"></span> Active</div><div><b>1</b></div></div>
-          <div class="legend-muted">Yellow dots = project · Heat = intensity · Blinking green = upcoming project</div>
-        `;
-
-        var open = false;
-        function render() { panel.style.display = open ? 'block' : 'none'; }
-        pill.addEventListener('click', function() { open = !open; render(); });
-        render();
-
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-        return container;
-      }
-    });
-    map.addControl(new LegendControl());
-  });
-})();
 </script>
     
 <style>
@@ -1377,76 +1237,7 @@
   }
 </style>
     
-<style>
-  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn {
-    position: absolute;
-    bottom: 20px;          /* 👈 Bottom position */
-    right: 20px;           /* 👈 Right position */
-    z-index: 1200;
-    background: #BEAA8D;
-    color: #111315;
-    font-weight: 800;
-    letter-spacing: .2px;
-    text-decoration: none;
-    padding: 12px 18px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.15);
-    box-shadow: 0 10px 28px rgba(0,0,0,.45);
-    font-size: 14px;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: all 0.2s ease;
-  }
-  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn:hover {
-    filter: brightness(0.92);
-    transform: translateY(-2px);
-  }
-  #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn:active {
-    transform: translateY(0);
-  }
-  @media (max-width: 520px) {
-    #map_650a101fa46c8081aa4ee9eed624a32a .donate-btn {
-      bottom: 16px;
-      right: 16px;
-      padding: 10px 14px;
-      font-size: 13px;
-    }
-  }
-</style>
-
-<script>
-(function(){
-  function whenMapReady(fn){
-    var tries=0;
-    (function tick(){
-      var map = window['map_650a101fa46c8081aa4ee9eed624a32a'];
-      if(map && map.getContainer) { fn(map); return; }
-      if(tries++ < 400) return setTimeout(tick, 25);
-      console.warn('Donate button: map container not ready');
-    })();
-  }
-  whenMapReady(function(map){
-    var cont = map.getContainer();
-    // remove duplicate button if cell re-run
-    var existing = cont.querySelector('.donate-btn');
-    if(existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-    var a = document.createElement('a');
-    a.className = 'donate-btn';
-    a.href = 'https://inspirasiquran.hayratreliefmalaysia.com';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = "Waqf Al-Quran RM35";
-
-    // prevent drag/zoom when clicking button
-    ['click','dblclick','mousedown','mouseup','touchstart','touchend','wheel'].forEach(function(ev){
-      a.addEventListener(ev, function(e){ e.stopPropagation(); });
-    });
-
-    cont.appendChild(a);
-  });
-})();
-</script>
+<!-- Donate/Waqf button removed -->
     
 <style>
   /* scoped to the dashboard area */
