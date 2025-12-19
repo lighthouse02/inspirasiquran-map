@@ -408,18 +408,73 @@
                 if(!dotsRoot) return null;
                 var wrapper = dotsRoot.parentElement || dotsRoot;
                 var lbl = wrapper.querySelector('#pageMapTimelineHoverLabel');
-                if(!lbl){ lbl = document.createElement('div'); lbl.id = 'pageMapTimelineHoverLabel'; lbl.className = 'page-timeline-hoverlabel'; lbl.style.display = 'none'; wrapper.appendChild(lbl); }
+                if(!lbl){
+                  lbl = document.createElement('div');
+                  lbl.id = 'pageMapTimelineHoverLabel';
+                  lbl.className = 'page-timeline-hoverlabel';
+                  // default inline styles; we'll adjust position dynamically on show
+                  lbl.style.display = 'none';
+                  lbl.style.position = 'absolute';
+                  lbl.style.left = '0%';
+                  lbl.style.top = '-44px';
+                  lbl.style.pointerEvents = 'none';
+                  wrapper.appendChild(lbl);
+                }
                 return lbl;
               }
+
+              // Position the hover label; put it above the track by default,
+              // but if that would overlap the Leaflet map area, place it below.
+              function positionHoverLabel(lbl, pct){
+                try{
+                  if(!lbl) return;
+                  var wrapper = dotsRoot.parentElement || dotsRoot;
+                  var track = wrapper.querySelector('#pageMapTimelineTrack') || wrapper;
+                  var rect = track.getBoundingClientRect();
+                  // set horizontal position (clamped to 2%-98% to avoid overflow)
+                  pct = Math.max(2, Math.min(98, pct));
+                  lbl.style.left = pct + '%';
+                  // temporarily show to measure
+                  lbl.style.display = 'block';
+                  lbl.style.transform = 'translateX(-50%)';
+
+                  // determine if the label would overlap the map
+                  var mapEl = document.getElementById('map_650a101fa46c8081aa4ee9eed624a32a');
+                  var placeBelow = false;
+                  try{
+                    if(mapEl){
+                      var mapRect = mapEl.getBoundingClientRect();
+                      var lblRect = lbl.getBoundingClientRect();
+                      // if the label's top would be above the map top (i.e., overlap), or
+                      // the wrapper sits inside the map vertical area, place it below.
+                      if(lblRect.top < mapRect.top + 8 || wrapper.getBoundingClientRect().bottom > mapRect.top + 4){
+                        placeBelow = true;
+                      }
+                    }
+                  }catch(e){ /* ignore measurement errors */ }
+
+                  if(placeBelow){
+                    // place below the track
+                    lbl.style.top = '100%';
+                    lbl.style.marginTop = '8px';
+                    lbl.style.bottom = '';
+                  } else {
+                    // place above by default
+                    lbl.style.top = '-44px';
+                    lbl.style.marginTop = '';
+                  }
+                }catch(e){ /* ignore */ }
+              }
+
               function showHoverLabel(ts, pct){
                 try{
                   var lbl = ensureHoverLabel(); if(!lbl) return;
                   lbl.textContent = new Date(parseInt(ts)).toLocaleString();
-                  lbl.style.left = pct + '%';
-                  lbl.style.display = 'block';
+                  positionHoverLabel(lbl, pct);
                   if(_hoverTimeout) { clearTimeout(_hoverTimeout); _hoverTimeout = null; }
                 }catch(e){}
               }
+
               function hideHoverLabel(){
                 try{ var lbl = ensureHoverLabel(); if(!lbl) return; _hoverTimeout = setTimeout(function(){ lbl.style.display = 'none'; }, 250); }catch(e){}
               }
