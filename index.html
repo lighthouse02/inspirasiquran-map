@@ -57,10 +57,10 @@
             border-bottom: 1px solid rgba(190,170,141,.35);
             font-family: system-ui, Arial; padding: 10px 16px;">
   <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-    <div style="display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:.5px;">
+      <div style="display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:.5px;">
       <img src='quran-map/assets/icon quran.png' alt="Quran" style="width:24px;height:24px;object-fit:contain;border-radius:6px;border:1px solid rgba(190,170,141,.45);background:#BEAA8D;" />
       <span>DUNIA MEMBACA AL-QURAN</span>
-      <span style="opacity:.6;font-weight:400;font-size:12px;margin-left:10px;">Last updated: auto</span>
+      <span id="siteLastUpdated" style="opacity:.6;font-weight:400;font-size:12px;margin-left:10px;">Last updated: auto</span>
     </div>
     <div style="flex:1"></div>
     <div style="display:flex;gap:22px;">
@@ -117,6 +117,19 @@
   })();
 </script>
     <style>
+      /* Page timeline - create a visible track and place incidents inside it */
+      .page-timeline-track{ position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:14px; background:#121316; border-radius:6px; border:2px solid rgba(255,255,255,0.04); box-shadow: inset 0 0 0 4px rgba(17,19,21,0.6); z-index:1 }
+      .page-timeline-dots{ position:relative; height:0; }
+      .page-timeline-counts{ position:relative; height:0; }
+      .page-timeline-count{ position:absolute; top:-30px; transform:translateX(-50%); background:#ff6b6b;color:#111;font-weight:800;border-radius:999px;padding:4px 6px;font-size:12px; box-shadow:0 6px 14px rgba(0,0,0,.45); pointer-events:auto; z-index:5 }
+      /* incident buttons placed inside the track (centered vertically) */
+      .page-timeline-dot{ position:absolute; top:50%; transform:translate(-50%,-50%); width:12px; height:12px; border-radius:50%; background:#ff6b6b; border:0; transition:all .12s ease; cursor:pointer; box-shadow:0 6px 14px rgba(0,0,0,.25); z-index:6 }
+      .page-timeline-dot.active{ background:#ff6b6b; box-shadow:0 0 8px rgba(255,107,107,0.45); width:12px; height:12px; }
+      .page-timeline-hoverlabel{ position:absolute; top:-44px; transform:translateX(-50%); font-family:monospace; font-size:12px; padding:6px 8px; border-radius:6px; background:#111; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; }
+      .page-timeline-handle{ position:absolute; top:50%; transform:translate(-50%,-50%); width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #ff6b6b; box-shadow:0 6px 18px rgba(0,0,0,.45); z-index:8; cursor:grab; }
+      .page-timeline-handle:active{ cursor:grabbing }
+      #pageMapTimeline{ margin-bottom:6px }
+
       /* Activity feed styles (match table width/appearance) */
       .activity-wrap { margin-top:14px; }
       .activity-table-wrap { background:#171a1f; border-radius:12px; padding:6px; box-shadow: 0 6px 22px rgba(0,0,0,.35); }
@@ -141,9 +154,44 @@
       @keyframes feed-blink { 0% { opacity:1; transform:scale(1);} 50% { opacity:.25; transform:scale(.9);} 100% { opacity:1; transform:scale(1);} }
       /* compact mobile layout */
       @media (max-width:720px){ .activity-item { flex-direction:column; align-items:flex-start; } .activity-right{ width:100%; justify-content:flex-start; margin-top:6px } }
+      /* Sumud-like card feed styles */
+      .activity-cards{ display:flex; flex-direction:column; gap:12px; }
+      .activity-card{ display:flex; gap:12px; align-items:flex-start; background:linear-gradient(180deg, rgba(25,27,30,0.6), rgba(18,20,23,0.6)); border:1px solid rgba(190,170,141,0.06); padding:12px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.45); }
+      /* replace large thumbnail with a compact red dot */
+      .activity-card .thumb{ width:28px; height:28px; border-radius:50%; background:transparent; display:flex; align-items:center; justify-content:center; color:#fff; font-size:0; flex-shrink:0 }
+      .activity-dot{ width:12px; height:12px; border-radius:50%; background:#ff6b6b; box-shadow:0 0 10px rgba(255,107,107,0.35); display:inline-block }
+      .activity-card .body{ flex:1; min-width:0 }
+      .activity-card .meta{ display:flex; gap:12px; align-items:center; color:#cfc6b8; font-size:13px; margin-bottom:6px }
+      .activity-card .title{ color:#f4f2ee; font-weight:800; font-size:15px; margin-bottom:6px }
+      .activity-card .desc{ color:#d7d0c0; font-size:13px; opacity:.95 }
+      .activity-card .cta{ margin-left:12px; display:flex; flex-direction:column; gap:8px }
+      .activity-count{ font-weight:800; color:#111315; background:#BEAA8D; padding:8px 10px; border-radius:999px; box-shadow:0 8px 18px rgba(0,0,0,.35) }
     </style>
 
     <script>
+      // helper: human-friendly relative time (verbose, pluralized)
+      function timeAgo(d){
+        if(!d) return 'just now';
+        var then = new Date(d);
+        if(isNaN(then.getTime())) return 'just now';
+        var now = new Date();
+        var diff = Math.floor((now - then) / 1000); // seconds
+        if(diff < 5) return 'just now';
+        if(diff < 60) return diff + (diff === 1 ? ' second ago' : ' seconds ago');
+        var m = Math.floor(diff / 60);
+        if(m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+        var h = Math.floor(m / 60);
+        if(h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+        var days = Math.floor(h / 24);
+        if(days < 7) return days + (days === 1 ? ' day ago' : ' days ago');
+        if(days < 31){
+          var weeks = Math.floor(days / 7);
+          if(weeks < 1) return days + (days === 1 ? ' day ago' : ' days ago');
+          return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+        }
+        // older: show localized date/time
+        return then.toLocaleDateString() + ' ' + then.toLocaleTimeString();
+      }
       // Helper: add an activity entry to the feed. Example usage:
       // addActivity('Prep: Quran printing & logistics', '13 December 2025', '8,000 Mushaf', 'Isparta, Turkiye', '🏭');
       function addActivity(title, dateStr, count, location, avatar){
@@ -158,6 +206,459 @@
       }
 
       // Example: keep initial static item (already in HTML). You can call addActivity() to add more.
+    </script>
+    <script>
+    // Activities loader: fetch activities.json, render feed and markers, and wire timeline filtering
+    (function(){
+      const ACTIVITIES_URL = '/activities.json';
+      let feedUL = document.getElementById('activityFeed');
+      // We'll create an in-map control for the feed/timeline; keep the external feed as fallback
+      const activityWrap = document.querySelector('.activity-wrap');
+      let timelineRange = null;
+      let timelineLabel = null;
+      let mapControlCreated = false;
+
+      const markersById = {};
+
+      function toTs(d){ return (d instanceof Date) ? d.getTime() : (isNaN(Date.parse(d)) ? null : Date.parse(d)); }
+
+      async function load(){
+        try{
+          console.log('Activities: fetching', ACTIVITIES_URL);
+          const r = await fetch(ACTIVITIES_URL, {cache:'no-cache'});
+          if(!r.ok){ console.warn('Activities: fetch returned', r.status); return []; }
+          const data = await r.json();
+          console.log('Activities: fetched', Array.isArray(data) ? data.length : Object.keys(data).length);
+          return Array.isArray(data) ? data : Object.values(data);
+        }catch(e){ console.warn('load activities failed', e); return []; }
+      }
+
+      function whenMapReady(cb){
+        var tries = 0;
+        (function tick(){
+          var m = window['map_650a101fa46c8081aa4ee9eed624a32a'];
+          if(m && typeof m.addControl === 'function'){ cb(m); return; }
+          if(tries++ < 400) return setTimeout(tick, 25);
+          console.warn('Timeline: map did not become ready');
+        })();
+      }
+
+      whenMapReady(function(map){
+        // Create an in-map activity control (timeline + feed)
+        if(!mapControlCreated){
+          var MapActivityControl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function(){
+              var container = L.DomUtil.create('div', 'map-activity-control');
+              container.style.maxWidth = '380px';
+              container.style.background = 'rgba(17,19,21,0.9)';
+              container.style.border = '1px solid rgba(190,170,141,.12)';
+              container.style.padding = '12px';
+              container.style.borderRadius = '12px';
+              container.style.boxShadow = '0 12px 34px rgba(0,0,0,.45)';
+              container.innerHTML = `
+                    <div class="mac-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                      <div style="font-weight:800;color:#f4f2ee;font-size:15px">Activity Feed</div>
+                      <button class="map-activity-toggle" aria-expanded="true" title="Collapse" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#f4f2ee;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;z-index:1300;pointer-events:auto">▼</button>
+                    </div>
+                    <div class="mac-content">
+                      <div style="margin-bottom:8px"><label style="color:#cfc6b8;font-size:13px;display:block;margin-bottom:6px">Timeline: <span id="mapTimelineLabel">All</span></label><input id="mapTimelineRange" type="range" style="width:100%"/></div>
+                      <div id="mapActivityFeed" class="activity-cards" style="max-height:48vh;overflow:auto;padding-right:6px"></div>
+                    </div>
+                  `;
+              // restore previous collapsed state if present
+              try{
+                var collapsed = localStorage.getItem('mapActivityCollapsed') === 'true';
+                if(collapsed){
+                  container.querySelector('.map-activity-toggle').setAttribute('aria-expanded','false');
+                  container.querySelector('.map-activity-toggle').textContent = '▶';
+                  // keep rectangular shape but collapse content (short height)
+                  container.style.maxWidth = '380px';
+                  container.style.width = '280px';
+                  container.style.height = '52px';
+                  container.style.padding = '8px 12px';
+                  container.style.overflow = 'hidden';
+                  var mc = container.querySelector('.mac-content'); if(mc) mc.style.display = 'none';
+                }
+              }catch(e){ /* ignore storage errors */ }
+              L.DomEvent.disableClickPropagation(container);
+              L.DomEvent.disableScrollPropagation(container);
+              // wire collapse/expand toggle
+              try{
+                var toggle = container.querySelector('.map-activity-toggle');
+                var content = container.querySelector('.mac-content');
+                toggle && toggle.addEventListener('click', function(ev){
+                  ev.stopPropagation();
+                  var expanded = toggle.getAttribute('aria-expanded') === 'true';
+                  if(expanded){
+                    toggle.setAttribute('aria-expanded','false');
+                    toggle.textContent = '▶';
+                    if(content) content.style.display = 'none';
+                    // keep rectangular collapsed container
+                    container.style.maxWidth = '380px';
+                    container.style.width = '280px';
+                    container.style.height = '52px';
+                    container.style.padding = '8px 12px';
+                    container.style.overflow = 'hidden';
+                    try{ localStorage.setItem('mapActivityCollapsed','true'); }catch(e){}
+                  } else {
+                    toggle.setAttribute('aria-expanded','true');
+                    toggle.textContent = '▼';
+                    if(content) content.style.display = 'block';
+                    container.style.maxWidth = '380px';
+                    container.style.width = '';
+                    container.style.height = '';
+                    container.style.padding = '12px';
+                    container.style.overflow = '';
+                    try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(e){}
+                  }
+                });
+                // allow clicking the small collapsed container area to re-open it
+                try{
+                  container.addEventListener('click', function(ev){
+                    // if currently collapsed and click is not on inner content, open
+                    if(toggle && toggle.getAttribute('aria-expanded') === 'false'){
+                      // ignore clicks that originate from map itself or from map controls nearby
+                      if(ev.target && ev.target.closest && ev.target.closest('.mac-content')) return;
+                      // trigger toggle open
+                      try{ toggle.click(); }catch(e){
+                        // fallback: directly expand
+                        toggle.setAttribute('aria-expanded','true'); toggle.textContent = '−'; if(content) content.style.display = 'block'; container.style.maxWidth = '380px'; try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(_){}
+                      }
+                    }
+                  });
+                }catch(e){ /* noop */ }
+              }catch(e){ console.warn('Activity control toggle setup failed', e); }
+              return container;
+            }
+          });
+          map.addControl(new MapActivityControl());
+          // Prefer page-level timeline if present (placed right after the map)
+          var pageRange = document.getElementById('pageMapTimelineRange');
+          if(pageRange){
+            timelineRange = pageRange;
+            // hide duplicate in-map range input if present
+            var inMap = document.getElementById('mapTimelineRange'); if(inMap) inMap.style.display = 'none';
+            // prefer page label too
+            timelineLabel = document.getElementById('pageMapTimelineLabel') || document.getElementById('mapTimelineLabel');
+          } else {
+            timelineRange = document.getElementById('mapTimelineRange');
+            timelineLabel = document.getElementById('mapTimelineLabel');
+          }
+          // use map activity feed container as primary feed target
+          var mapFeed = document.getElementById('mapActivityFeed');
+          if(mapFeed) feedUL = mapFeed;
+          // hide external feed to avoid duplicate UI
+          if(activityWrap && activityWrap.style) activityWrap.style.display = 'none';
+          mapControlCreated = true;
+        }
+
+        // movement track lines (thin red styling requested)
+        var movementFullLine = L.polyline([], { color: '#ff6b6b', weight: 0.5, opacity: 0.95, dashArray: '6 6', pane: 'overlayPane' }).addTo(map);
+        var movementProgressLine = L.polyline([], { color: '#ff6b6b', weight: 0.5, opacity: 0.95, pane: 'overlayPane' }).addTo(map);
+        const markerLayer = L.layerGroup().addTo(map);
+        var lastItems = [];
+
+        function clearFeedAndMarkers(){
+          feedUL.innerHTML = '';
+          markerLayer.clearLayers();
+          for(const k in markersById) delete markersById[k];
+        }
+
+        function render(items){
+          clearFeedAndMarkers();
+        // normalize and sort ascending by date
+        items = items.map(it=>({
+          id: it.id || ('a-'+Math.random().toString(36).slice(2)),
+          title: it.title || it.note || 'Activity',
+          date: (it.date ? new Date(it.date) : (it.created_at ? new Date(it.created_at) : new Date())),
+          count: it.count || it.mushaf || null,
+          location: it.location || '',
+          lat: (typeof it.lat==='number')?it.lat:(it.latitude||null),
+          lng: (typeof it.lng==='number')?it.lng:(it.longitude||null),
+          attachment: it.attachment || null,
+          note: it.note || ''
+        })).sort((a,b)=> a.date - b.date);
+
+        // update page header last-updated using newest activity timestamp
+        try{
+          if(items && items.length){
+            var latest = items.reduce((max,it)=> Math.max(max, it.date.getTime()), 0);
+            var el = document.getElementById('siteLastUpdated');
+            if(el) el.textContent = 'Last updated: ' + timeAgo(new Date(latest));
+          }
+        }catch(e){ }
+
+        if(items.length){
+          const times = items.map(i=>i.date.getTime());
+          const minT = Math.min(...times), maxT = Math.max(...times);
+          timelineRange.min = minT; timelineRange.max = maxT; timelineRange.value = maxT; timelineLabel.textContent = new Date(parseInt(timelineRange.value)).toLocaleString();
+          // render page-level timeline dots if present
+          try{
+            var dotsRoot = document.getElementById('pageMapTimelineDots');
+            var countsRoot = document.getElementById('pageMapTimelineCounts');
+            if(dotsRoot){
+              dotsRoot.innerHTML = '';
+              if(countsRoot) countsRoot.innerHTML = '';
+              var range = (maxT - minT) || 1;
+              // We'll bucket by percent rounded to two decimals so identical timestamps stack
+              var countsMap = {}; // key => {count, pct, ts}
+              var _hoverTimeout = null;
+              function ensureHoverLabel(){
+                if(!dotsRoot) return null;
+                var wrapper = dotsRoot.parentElement || dotsRoot;
+                var lbl = wrapper.querySelector('#pageMapTimelineHoverLabel');
+                if(!lbl){ lbl = document.createElement('div'); lbl.id = 'pageMapTimelineHoverLabel'; lbl.className = 'page-timeline-hoverlabel'; lbl.style.display = 'none'; wrapper.appendChild(lbl); }
+                return lbl;
+              }
+              function showHoverLabel(ts, pct){
+                try{
+                  var lbl = ensureHoverLabel(); if(!lbl) return;
+                  lbl.textContent = new Date(parseInt(ts)).toLocaleString();
+                  lbl.style.left = pct + '%';
+                  lbl.style.display = 'block';
+                  if(_hoverTimeout) { clearTimeout(_hoverTimeout); _hoverTimeout = null; }
+                }catch(e){}
+              }
+              function hideHoverLabel(){
+                try{ var lbl = ensureHoverLabel(); if(!lbl) return; _hoverTimeout = setTimeout(function(){ lbl.style.display = 'none'; }, 250); }catch(e){}
+              }
+              items.forEach(function(it){
+                var ts = it.date.getTime();
+                var pct = ((ts - minT) / range) * 100;
+                var key = pct.toFixed(2);
+                if(!countsMap[key]) countsMap[key] = { count: 0, pct: pct, ts: ts };
+                countsMap[key].count += 1;
+                // create the incident button for each activity (positioned above the range)
+                var btn = document.createElement('button');
+                btn.className = 'page-timeline-dot';
+                btn.setAttribute('data-ts', ts);
+                btn.setAttribute('title', it.title + ' — ' + new Date(ts).toLocaleString());
+                btn.style.left = pct + '%';
+                // make sure buttons receive pointer events even if wrapper is non-interactive
+                btn.style.pointerEvents = 'auto';
+                // click to jump timeline
+                btn.addEventListener('click', function(e){
+                  e.stopPropagation();
+                  try{ timelineRange.value = ts; applyFilter(); showHoverLabel(ts, pct); }catch(_){ }
+                });
+                // hover shows a small date label above the button
+                btn.addEventListener('mouseenter', function(){ showHoverLabel(ts, pct); });
+                btn.addEventListener('mouseleave', function(){ hideHoverLabel(); });
+                dotsRoot.appendChild(btn);
+              });
+              // render stacked count badges for buckets where count > 1
+              try{
+                Object.keys(countsMap).forEach(function(k){
+                  var info = countsMap[k];
+                  if(info.count > 1 && countsRoot){
+                    var badge = document.createElement('span');
+                    badge.className = 'page-timeline-count';
+                    badge.textContent = info.count;
+                    // allow pointer events on badges (so clicking a badge jumps to the latest ts in bucket)
+                    badge.style.pointerEvents = 'auto';
+                    badge.style.left = info.pct + '%';
+                    badge.setAttribute('data-count', info.count);
+                    badge.setAttribute('title',''+info.count+' activities');
+                    // clicking a badge will set the timeline to the bucket timestamp and apply filter
+                    badge.addEventListener('click', function(e){ e.stopPropagation(); timelineRange.value = info.ts; applyFilter(); });
+                    countsRoot.appendChild(badge);
+                  }
+                });
+              }catch(e){ console.warn('Render timeline counts failed', e); }
+
+              // --- create & sync a visible tracker handle (circle) on the track ---
+              try{
+                // expose timeline range extents for the drag math
+                window.__timeline_minT = minT;
+                window.__timeline_rangeMs = range;
+                function ensureHandle(){
+                  var wrapper = dotsRoot.parentElement || dotsRoot;
+                  var h = wrapper.querySelector('#pageMapTimelineHandle');
+                  if(!h){
+                    h = document.createElement('div');
+                    h.id = 'pageMapTimelineHandle';
+                    h.className = 'page-timeline-handle';
+                    h.style.left = '0%';
+                    h.style.pointerEvents = 'auto';
+                    wrapper.appendChild(h);
+
+                    // dragging support
+                    var dragging = false;
+                    function onMove(e){
+                      var clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+                      var track = document.getElementById('pageMapTimelineTrack'); if(!track) return;
+                      var rect = track.getBoundingClientRect();
+                      var pct = (clientX - rect.left) / rect.width; pct = Math.max(0, Math.min(1, pct));
+                      var ts = Math.round(window.__timeline_minT + pct * window.__timeline_rangeMs);
+                      try{ timelineRange.value = ts; timelineRange.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){ }
+                    }
+                    function onUp(){ dragging = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onUp); }
+                    h.addEventListener('mousedown', function(e){ e.preventDefault(); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); });
+                    h.addEventListener('touchstart', function(e){ e.preventDefault(); document.addEventListener('touchmove', onMove,{passive:false}); document.addEventListener('touchend', onUp); });
+                  }
+                  return wrapper.querySelector('#pageMapTimelineHandle');
+                }
+                function updateHandle(){
+                  var h = ensureHandle(); if(!h) return;
+                  var v = parseInt(timelineRange.value || 0);
+                  var pct = ((v - minT) / ((maxT - minT) || 1)) * 100;
+                  pct = Math.max(0, Math.min(100, pct));
+                  h.style.left = pct + '%';
+                  h.setAttribute('title', new Date(v).toLocaleString());
+                }
+                // wire range events so handle moves when slider changes
+                try{ timelineRange.addEventListener('input', updateHandle); }catch(e){}
+                // initial update
+                try{ updateHandle(); }catch(e){}
+              }catch(e){ console.warn('Timeline handle init failed', e); }
+            }
+          }catch(e){ console.warn('Timeline dots render failed', e); }
+        } else {
+          timelineRange.disabled = true; timelineLabel.textContent = 'No activities';
+        }
+
+        // append items (oldest first so newest appears last by addActivity which inserts at top)
+        for(const it of items){
+          const dateStr = it.date.toLocaleString();
+          const countStr = it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '';
+          // Render Sumud-style activity card
+          const card = document.createElement('div'); card.className = 'activity-card';
+          // stack top row and attachment vertically so the attachment spans full card width
+          card.style.flexDirection = 'column';
+          card.style.alignItems = 'stretch';
+          card.setAttribute('data-activity-id', it.id);
+          card.setAttribute('data-ts', it.date.getTime());
+          card._ts = it.date.getTime();
+          let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
+          // keep the small dot thumb (do not replace it with an inline image)
+          const meta = `<div class="meta"><div class="date">${dateStr}</div><div class="location">${it.location||''}</div></div>`;
+          const body = `<div class="body">${meta}<div class="title">${it.title}</div><div class="desc">${it.note||''}</div></div>`;
+          const cta = `<div class="cta"><div class="activity-count">${it.count?it.count:''}</div></div>`;
+              const topRow = `<div style="display:flex;gap:12px;align-items:flex-start;width:100%">${thumb}${body}${cta}</div>`;
+              // attachment row (full width) if present
+              let attachmentHtml = '';
+              try{
+                if(it.attachment && (it.attachment.type === 'photo' || it.attachment.webPath || it.attachment.path)){
+                  var src = '';
+                  try{
+                    var raw = it.attachment.webPath || it.attachment.path || '';
+                    raw = String(raw).replace(/\\\\/g, '/').replace(/\\/g,'/');
+                    var parts = raw.split('/');
+                    var bn = parts.pop() || parts.pop();
+                    if(!bn) bn = raw;
+                    src = './telegram-bot/uploads/' + bn;
+                  }catch(e){ src = ''; }
+                  // render attachment as full-width 16:9 cover (will crop to fill)
+                  attachmentHtml = `<div class="attachment-row" style="margin-top:10px;width:100%"><div class="attachment-inner" style="width:100%;position:relative;padding-top:56.25%;overflow:hidden;border-radius:8px;border:1px solid rgba(255,255,255,0.04)"><img class="attachment-img" src="${src}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block;" alt="attachment"/></div></div>`;
+                }
+              }catch(e){ }
+              card.innerHTML = topRow + attachmentHtml;
+          // insert newest at top
+          feedUL.insertBefore(card, feedUL.firstChild);
+          card.addEventListener('click', ()=>{
+            const m = markersById[it.id];
+            if(!m) return;
+            try{
+              // temporarily lift map max bounds so the map can move freely
+              var prevBounds = null;
+              try{ prevBounds = map.getMaxBounds ? map.getMaxBounds() : null; }catch(e){}
+              try{ map.setMaxBounds && map.setMaxBounds(null); }catch(e){}
+              // center/zoom to marker
+              map.setView(m.getLatLng(), Math.max(6, map.getZoom()));
+              m.openPopup && m.openPopup();
+              // restore previous bounds after a short delay
+              setTimeout(function(){ try{ if(prevBounds) map.setMaxBounds(prevBounds); }catch(e){} }, 3000);
+            }catch(e){ console.warn('Feed click navigation failed', e); }
+          });
+
+          if(it.lat!=null && it.lng!=null){
+            const m = L.circleMarker([it.lat, it.lng], { radius:6, color:'#ff6b6b', fill: true, fillColor: '#ff6b6b', fillOpacity: 0.95, weight: 1 });
+            // try to add to markerLayer, fallback to map if markerLayer isn't a proper LayerGroup
+            try{ if(markerLayer && typeof markerLayer.addLayer === 'function'){ markerLayer.addLayer(m); } else { m.addTo(map); } }catch(e){ try{ m.addTo(map); }catch(_){ console.warn('Failed to add marker to any layer', _); } }
+            m.bindPopup(`<div style="color:#f4f2ee"><b>${it.title}</b><div style="opacity:.8;font-size:13px">${it.location}</div><div style="margin-top:6px">${it.note}</div><div style="margin-top:6px;font-weight:700">${it.count?it.count+' Mushaf':''}</div></div>`);
+            m._ts = it.date.getTime();
+            markersById[it.id] = m;
+          }
+        }
+
+        // Build full movement coords from chronological items
+        const movementCoords = items.filter(i=>i.lat!=null && i.lng!=null).map(i=>[i.lat, i.lng]);
+        movementFullLine.setLatLngs(movementCoords);
+        lastItems = items;
+
+        // initial progress based on current timeline value
+        try{ const maxT = timelineRange ? parseInt(timelineRange.value) : Date.now(); updateMovementProgress(maxT); }catch(e){}
+
+        applyFilter();
+        }
+
+        function applyFilter(){
+          const maxT = parseInt(timelineRange.value);
+          timelineLabel.textContent = new Date(maxT).toLocaleString();
+          // feed items
+          Array.from(feedUL.children).forEach(li=>{
+            const ts = parseInt(li.getAttribute('data-ts') || li._ts || 0);
+            li.style.display = (ts <= maxT) ? '' : 'none';
+          });
+          // markers
+          for(const id in markersById){
+            const m = markersById[id];
+            if(!m) continue;
+            try{
+              if((m._ts || 0) <= maxT){
+                if(markerLayer && typeof markerLayer.addLayer === 'function') markerLayer.addLayer(m); else map.addLayer(m);
+              } else {
+                if(markerLayer && typeof markerLayer.removeLayer === 'function') markerLayer.removeLayer(m); else map.removeLayer && map.removeLayer(m);
+              }
+            }catch(e){
+              // final fallback: toggle marker on map
+              try{ if((m._ts || 0) <= maxT) map.addLayer(m); else map.removeLayer && map.removeLayer(m); }catch(_){ console.warn('Marker toggle failed', _); }
+            }
+          }
+          // update movement progress line to show path up to maxT
+          try{ updateMovementProgress(maxT); }catch(e){}
+          // update page timeline dot active states
+          try{
+            var dots = document.querySelectorAll('#pageMapTimelineDots .page-timeline-dot');
+            dots && Array.from(dots).forEach(function(d){
+              var ts = parseInt(d.getAttribute('data-ts')||0);
+              if(ts <= maxT) d.classList.add('active'); else d.classList.remove('active');
+            });
+          }catch(e){}
+        }
+
+        function updateMovementProgress(maxT){
+          if(!lastItems || !lastItems.length) return;
+          const coordsUpTo = lastItems.filter(i=> (i.lat!=null && i.lng!=null) && (i.date.getTime() <= maxT) ).map(i=>[i.lat, i.lng]);
+          movementProgressLine.setLatLngs(coordsUpTo);
+        }
+        timelineRange.addEventListener('input', applyFilter);
+
+        // helper: adjust attachment wrapper to match image aspect ratio (so portrait fills taller)
+        function adjustAttachmentAspects(){
+          try{
+            var imgs = document.querySelectorAll('.attachment-inner .attachment-img');
+            imgs && Array.from(imgs).forEach(function(img){
+              function apply(){
+                try{
+                  var w = img.naturalWidth || img.width;
+                  var h = img.naturalHeight || img.height;
+                  if(!w || !h) return;
+                  var pct = (h / w) * 100;
+                  var wrap = img.closest('.attachment-inner');
+                  if(wrap) wrap.style.paddingTop = pct.toFixed(2) + '%';
+                }catch(e){}
+              }
+              if(img.complete) apply(); else img.addEventListener('load', apply);
+            });
+          }catch(e){/* ignore */}
+        }
+
+        // load & render
+        load().then(render).catch(e=>console.warn(e));
+      });
+    })();
     </script>
     <script>
       // Floating tooltip logic: attach a tooltip element to body so it won't be clipped by parents
@@ -240,6 +741,7 @@
     border-radius:999px;padding:8px 12px;font-size:13px;display:flex;gap:10px;
     align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer}
   .legend-pill .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+</style>
 <style>
   .legend-wrap{position:relative;font-family:system-ui,Arial;color:#f4f2ee}
   .legend-pill{background:rgba(17,19,21,.92);border:1px solid rgba(190,170,141,.45);
@@ -279,27 +781,33 @@
     
             <div class="folium-map" id="map_650a101fa46c8081aa4ee9eed624a32a" ></div>
 
-            <!-- Activity Feed: placed after the map and before Project Locations -->
-            <div class="dash-wrap activity-wrap" aria-label="Activity Feed">
-              <div class="dash-title">Activity Feed</div>
-              <div class="table-wrap activity-table-wrap">
-                <ul class="activity-feed" id="activityFeed">
-                  <!-- Example item (you can add items dynamically via JS) -->
-                  <li class="activity-item" data-loc="Isparta, Turkiye">
-                    <div style="display:flex;align-items:center;min-width:0">
-                      <div class="activity-avatar">📖</div>
-                      <div class="activity-left">
-                        <div class="activity-main"><span class="activity-title" data-tooltip="Isparta, Turkiye · 8,000 Mushaf">Prep: Quran printing & logistics</span></div>
-                        <div class="activity-sub"><span class="activity-date">18 December 2025</span></div>
-                      </div>
-                    </div>
-                    <div class="activity-right">
-                      <div class="activity-location"><span class="location-dot" title="Isparta, Turkiye"></span> Isparta, Turkiye</div>
-                    </div>
-                  </li>
-                </ul>
+            <!-- Page-level timeline placed directly after the map -->
+            <div id="pageMapTimeline" style="max-width:1180px;margin:8px auto 0;padding:0 16px;">
+              <div style="background:transparent;display:flex;align-items:center;gap:12px;color:#cfc6b8;font-size:13px;">
+                <label style="min-width:78px;color:#cfc6b8;font-weight:700;">Timeline</label>
+                <div style="flex:1; position:relative; height:44px;">
+                  <!-- range sits inside a relative container so we can absolutely place incident buttons above it -->
+                  <input id="pageMapTimelineRange" type="range" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);width:100%; height:14px; background:transparent; -webkit-appearance:none; z-index:3;">
+                    <style>
+                      /* style the native range thumb to be subtle and transparent so the custom track shows through */
+                      #pageMapTimelineRange::-webkit-slider-runnable-track{ height:14px; background:transparent; }
+                      #pageMapTimelineRange::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; margin-top:-2px; background:transparent; border-radius:50%; }
+                      #pageMapTimelineRange::-moz-range-track{ height:14px; background:transparent; }
+                      #pageMapTimelineRange::-moz-range-thumb{ width:18px; height:18px; background:transparent; border:none; }
+                    </style>
+                  <div id="pageMapTimelineTrack" class="page-timeline-track" aria-hidden="true"></div>
+                  <div id="pageMapTimelineCountsWrapper" style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); pointer-events:auto;">
+                    <div id="pageMapTimelineCounts" class="page-timeline-counts" aria-hidden="true"></div>
+                  </div>
+                  <div id="pageMapTimelineDotsWrapper" style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); pointer-events:auto; z-index:4;">
+                    <div id="pageMapTimelineDots" class="page-timeline-dots" aria-hidden="true"></div>
+                  </div>
+                </div>
+                <div id="pageMapTimelineLabel" style="min-width:180px; text-align:right; color:#cfc6b8; font-size:13px;">All</div>
               </div>
             </div>
+
+           
         
     
 <style>
@@ -339,25 +847,45 @@
 </style>
     
 <script>
-(function() {
-  var data = [{'label': 'Chad', 'lat': 15.454166, 'lng': 18.732207}, {'label': 'Djibouti', 'lat': 11.825138, 'lng': 42.590275}, {'label': 'Niger', 'lat': 17.607789, 'lng': 8.081666}, {'label': 'Cameroon', 'lat': 12.087083, 'lng': 15.0148322}, {'label': 'Ethiopia', 'lat': 8.5263486, 'lng': 39.2583293}, {'label': 'Tanzania', 'lat': -6.1629685, 'lng': 39.1865491}, {'label': 'Tanzania', 'lat': -6.9275886, 'lng': 39.1335549}, {'label': 'Tanzania', 'lat': -6.135729500000001, 'lng': 39.3621196}, {'label': 'Sarajevo, Bosnia', 'lat': 43.8598677, 'lng': 18.4128265}, {'label': 'Ouagadougou, Burkina Faso', 'lat': 12.3714277, 'lng': -1.5196603}];
-  // Build a simple layer of invisible markers for search hits
-  var searchLayer = L.layerGroup().addTo(map_650a101fa46c8081aa4ee9eed624a32a);
-  data.forEach(function(d) {
-    L.marker([d.lat, d.lng], {opacity:0}).bindTooltip(d.label).addTo(searchLayer);
-  });
-  var searchControl = new L.Control.Search({
-    layer: searchLayer,
-    propertyName: 'title', // not used because we use tooltips
-    zoom: 8,
-    initial: false,
-    collapsed: false,
-    textPlaceholder: 'Search place or benefitor',
-    position: 'topleft'
-  });
-  searchControl._input.style.width = '220px';
-  map_650a101fa46c8081aa4ee9eed624a32a.addControl(searchControl);
-})();
+  (function(){
+    var data = [{'label': 'Chad', 'lat': 15.454166, 'lng': 18.732207}, {'label': 'Djibouti', 'lat': 11.825138, 'lng': 42.590275}, {'label': 'Niger', 'lat': 17.607789, 'lng': 8.081666}, {'label': 'Cameroon', 'lat': 12.087083, 'lng': 15.0148322}, {'label': 'Ethiopia', 'lat': 8.5263486, 'lng': 39.2583293}, {'label': 'Tanzania', 'lat': -6.1629685, 'lng': 39.1865491}, {'label': 'Tanzania', 'lat': -6.9275886, 'lng': 39.1335549}, {'label': 'Tanzania', 'lat': -6.135729500000001, 'lng': 39.3621196}, {'label': 'Sarajevo, Bosnia', 'lat': 43.8598677, 'lng': 18.4128265}, {'label': 'Ouagadougou, Burkina Faso', 'lat': 12.3714277, 'lng': -1.5196603}];
+    function whenMapReady(cb){
+      var tries = 0;
+      (function tick(){
+        var m = window['map_650a101fa46c8081aa4ee9eed624a32a'];
+        if(m && typeof m.addControl === 'function'){ cb(m); return; }
+        if(tries++ < 400) return setTimeout(tick, 25);
+        console.warn('Search: map not ready');
+      })();
+    }
+
+    whenMapReady(function(map){
+      // Build a simple layer of invisible markers for search hits
+      var searchLayer = L.layerGroup();
+      data.forEach(function(d) {
+        L.marker([d.lat, d.lng], {opacity:0}).bindTooltip(d.label).addTo(searchLayer);
+      });
+      // create search control only when plugin is loaded
+      if (L && L.Control && typeof L.Control.Search === 'function'){
+        var searchControl = new L.Control.Search({
+          layer: searchLayer,
+          propertyName: 'title', // not used because we use tooltips
+          zoom: 8,
+          initial: false,
+          collapsed: false,
+          textPlaceholder: 'Search place or benefitor',
+          position: 'topleft'
+        });
+        try{ searchControl._input.style.width = '220px'; }catch(e){}
+        // attach layer and control to the map
+        try{ searchLayer.addTo(map); }catch(e){ map.addLayer && map.addLayer(searchLayer); }
+        map.addControl(searchControl);
+      } else {
+        console.warn('Leaflet-Search plugin not found; search control skipped');
+        try{ searchLayer.addTo(map); }catch(e){ map.addLayer && map.addLayer(searchLayer); }
+      }
+    });
+  })();
 </script>
     
 <style>
@@ -1521,7 +2049,22 @@
             );
         
     
-            marker_cluster_38407f48bfb0ef1004c5827501774c97.addTo(feature_group_42780829d8b3ea0b2243a12a6e93e853);
+            try{
+              var targetGroup = feature_group_42780829d8b3ea0b2243a12a6e93e853;
+              console.log('ATTACH_CLUSTER:', { targetGroupType: typeof targetGroup, constructor: targetGroup && targetGroup.constructor && targetGroup.constructor.name, hasAddLayer: targetGroup && typeof targetGroup.addLayer === 'function', markerClusterType: (marker_cluster_38407f48bfb0ef1004c5827501774c97 && marker_cluster_38407f48bfb0ef1004c5827501774c97.constructor && marker_cluster_38407f48bfb0ef1004c5827501774c97.constructor.name) });
+              if(targetGroup && typeof targetGroup.addLayer === 'function'){
+                targetGroup.addLayer(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+              } else if(window && window.map_650a101fa46c8081aa4ee9eed624a32a && typeof window.map_650a101fa46c8081aa4ee9eed624a32a.addLayer === 'function'){
+                console.warn('ATTACH_CLUSTER: targetGroup missing addLayer, attaching to map instead');
+                window.map_650a101fa46c8081aa4ee9eed624a32a.addLayer(marker_cluster_38407f48bfb0ef1004c5827501774c97);
+              } else {
+                console.warn('ATTACH_CLUSTER: falling back to addTo(targetGroup) which may fail');
+                marker_cluster_38407f48bfb0ef1004c5827501774c97.addTo(feature_group_42780829d8b3ea0b2243a12a6e93e853);
+              }
+            }catch(e){
+              console.warn('SAFE: failed to attach marker cluster to feature group', e);
+              try{ marker_cluster_38407f48bfb0ef1004c5827501774c97.addTo(window.map_650a101fa46c8081aa4ee9eed624a32a); }catch(_){ console.error('FINAL fallback failed', _); }
+            }
         
     
             var marker_5002f803cc2c3508d87c3fda6b937ea2 = L.marker(
