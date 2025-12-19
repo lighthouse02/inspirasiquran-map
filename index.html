@@ -24,6 +24,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    <!-- Improved readable UI font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -35,7 +37,9 @@
                     left: 0.0%;
                     top: 0.0%;
                 }
-                .leaflet-container { font-size: 1rem; }
+              /* Use Inter for improved legibility and avoid hollow/outlined rendering */
+              body, html, .folium-map, .leaflet-container { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 16px; }
+              .leaflet-container { font-size: 1rem; }
             </style>
         
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
@@ -404,65 +408,67 @@
               // We'll bucket by percent rounded to two decimals so identical timestamps stack
               var countsMap = {}; // key => {count, pct, ts}
               var _hoverTimeout = null;
+              // Create or return a global hover label element attached to document.body
               function ensureHoverLabel(){
-                if(!dotsRoot) return null;
-                var wrapper = dotsRoot.parentElement || dotsRoot;
-                var lbl = wrapper.querySelector('#pageMapTimelineHoverLabel');
+                var lbl = document.getElementById('pageMapTimelineHoverLabel');
                 if(!lbl){
                   lbl = document.createElement('div');
                   lbl.id = 'pageMapTimelineHoverLabel';
                   lbl.className = 'page-timeline-hoverlabel';
-                  // default inline styles; we'll adjust position dynamically on show
-                  lbl.style.display = 'none';
+                  // make it float above everything
                   lbl.style.position = 'absolute';
-                  lbl.style.left = '0%';
-                  lbl.style.top = '-44px';
+                  lbl.style.zIndex = 999999;
+                  lbl.style.display = 'none';
                   lbl.style.pointerEvents = 'none';
-                  wrapper.appendChild(lbl);
+                  document.body.appendChild(lbl);
                 }
                 return lbl;
               }
 
-              // Position the hover label; put it above the track by default,
-              // but if that would overlap the Leaflet map area, place it below.
+              // Position the hover label in page coordinates. By default place above the track;
+              // if that would overlap the map area, place it below the track.
               function positionHoverLabel(lbl, pct){
                 try{
-                  if(!lbl) return;
+                  if(!lbl || !dotsRoot) return;
                   var wrapper = dotsRoot.parentElement || dotsRoot;
                   var track = wrapper.querySelector('#pageMapTimelineTrack') || wrapper;
-                  var rect = track.getBoundingClientRect();
-                  // set horizontal position (clamped to 2%-98% to avoid overflow)
+                  var trackRect = track.getBoundingClientRect();
+                  // clamp pct to avoid touching edges
                   pct = Math.max(2, Math.min(98, pct));
-                  lbl.style.left = pct + '%';
-                  // temporarily show to measure
+                  var x = trackRect.left + (pct/100) * trackRect.width;
+
+                  // temporarily display to measure height
                   lbl.style.display = 'block';
                   lbl.style.transform = 'translateX(-50%)';
+                  var lblRect = lbl.getBoundingClientRect();
 
-                  // determine if the label would overlap the map
+                  // determine placement relative to map
                   var mapEl = document.getElementById('map_650a101fa46c8081aa4ee9eed624a32a');
                   var placeBelow = false;
-                  try{
-                    if(mapEl){
-                      var mapRect = mapEl.getBoundingClientRect();
-                      var lblRect = lbl.getBoundingClientRect();
-                      // if the label's top would be above the map top (i.e., overlap), or
-                      // the wrapper sits inside the map vertical area, place it below.
-                      if(lblRect.top < mapRect.top + 8 || wrapper.getBoundingClientRect().bottom > mapRect.top + 4){
-                        placeBelow = true;
-                      }
+                  if(mapEl){
+                    var mapRect = mapEl.getBoundingClientRect();
+                    // if placing above would put the label inside the map area, or the wrapper overlaps map,
+                    // choose to place below
+                    if((trackRect.top - lblRect.height - 8) < mapRect.top || wrapper.getBoundingClientRect().bottom > mapRect.top + 4){
+                      placeBelow = true;
                     }
-                  }catch(e){ /* ignore measurement errors */ }
-
-                  if(placeBelow){
-                    // place below the track
-                    lbl.style.top = '100%';
-                    lbl.style.marginTop = '8px';
-                    lbl.style.bottom = '';
-                  } else {
-                    // place above by default
-                    lbl.style.top = '-44px';
-                    lbl.style.marginTop = '';
                   }
+
+                  var top;
+                  if(placeBelow){
+                    top = trackRect.bottom + 8; // below track
+                  } else {
+                    top = trackRect.top - lblRect.height - 8; // above track
+                  }
+
+                  // clamp within viewport vertically
+                  var vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+                  var vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+                  top = Math.max(4, Math.min(top, vh - lblRect.height - 4));
+
+                  // set absolute coordinates
+                  lbl.style.left = x + 'px';
+                  lbl.style.top = top + 'px';
                 }catch(e){ /* ignore */ }
               }
 
@@ -1092,6 +1098,11 @@
     box-shadow: 0 6px 18px rgba(0,0,0,.35);
   }
   .leaflet-tooltip-left:before { border-right-color: rgba(0,0,0,.85); }
+
+  /* Normalize generated popup inner boxes so they match the Leaflet popup shell */
+  .leaflet-popup-content > div { background: transparent !important; box-shadow: none !important; border: none !important; width: auto !important; height: auto !important; padding: 0 !important; }
+  .leaflet-popup-content > div > div { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 !important; }
+  .leaflet-popup-content a { display: inline-block; margin-top: 6px; background: #BEAA8D; color: #111315; font-weight: 700; padding: 8px 10px; border-radius: 8px; text-decoration: none; }
   .leaflet-tooltip-right:before { border-left-color: rgba(0,0,0,.85); }
   .leaflet-tooltip-top:before { border-bottom-color: rgba(0,0,0,.85); }
   .leaflet-tooltip-bottom:before { border-top-color: rgba(0,0,0,.85); }
