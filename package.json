@@ -1,0 +1,10 @@
+{
+  "name": "inspirasiquran-map",
+  "private": true,
+  "description": "Static site + Netlify Functions (Neon-backed activity feed)",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
