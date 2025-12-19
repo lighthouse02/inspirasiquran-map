@@ -148,6 +148,108 @@ const sessions = {};
 function startSession(chatId, userId){ sessions[chatId] = { userId, step:'title', data:{} }; }
 function endSession(chatId){ delete sessions[chatId]; }
 
+function normalizeText(s){
+  return String(s || '').trim();
+}
+
+function isSkipText(text){
+  const t = normalizeText(text).toLowerCase();
+  if(!t) return false;
+  // Support "/skip", "/skip@botname", and plain "skip".
+  return t === 'skip' || t === '/skip' || t.startsWith('/skip@');
+}
+
+function parseCountInput(raw){
+  const t = normalizeText(raw);
+  if(!t || isSkipText(t)) return null;
+  // Treat 0 as "unknown" (null)
+  if(/^0+$/.test(t.replace(/[\s,._-]/g,''))) return null;
+
+  // If it contains digits, try to parse a numeric count even with separators.
+  // Examples: "1200", "1,200", "1 200", "8000 mushaf" => 1200/8000
+  const digitMatch = t.match(/\d[\d,._\s]*/);
+  if(digitMatch){
+    const numStr = digitMatch[0].replace(/[^\d.]/g, '');
+    const n = Number(numStr);
+    if(!Number.isNaN(n) && Number.isFinite(n)){
+      // If the remainder is only a unit like "mushaf", keep it numeric (UI adds unit).
+      const remainder = t.replace(digitMatch[0], '').trim().toLowerCase();
+      if(!remainder || remainder === 'mushaf' || remainder === 'mushafs') return n;
+      // Otherwise preserve the original text (it may contain meaningful qualifiers).
+      return t;
+    }
+  }
+
+  // Fallback: keep text as-is.
+  return t;
+}
+
+async function sendPreview(chatId, s){
+  const item = {
+    id: makeId(),
+    title: s.data.title,
+    date: safeDateISO(s.data.date),
+    count: s.data.count,
+    location: s.data.location,
+    lat: s.data.lat,
+    lng: s.data.lng,
+    note: s.data.note,
+    attachment: s.data.attachment||null
+  };
+
+  s.pending = item;
+  s.step = 'confirming';
+
+  const displayDate = item.date ? formatDateUTC(item.date) : (item.dateRaw || '');
+  let preview = `*Preview activity*\n\n*Title:* ${escapeMarkdown(item.title)}\n*Date:* ${escapeMarkdown(displayDate)}\n*Count:* ${escapeMarkdown(String(item.count||''))}\n*Location:* ${escapeMarkdown(String(item.location||''))}`;
+  if(item.lat && item.lng) preview += `\n*Coords:* ${item.lat}, ${item.lng}`;
+  if(item.note) preview += `\n\n*Note:* ${escapeMarkdown(item.note)}`;
+  if(item.attachment && item.attachment.type) preview += `\n\n_Attachment:_ ${escapeMarkdown(item.attachment.type)}`;
+
+  const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
+  try{
+    if(item.attachment && item.attachment.type === 'photo' && item.attachment.path && fs.existsSync(item.attachment.path)){
+      item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path));
+      await bot.sendPhoto(chatId, item.attachment.path, { caption: preview, parse_mode: 'Markdown', reply_markup: keyboard });
+    } else {
+      if(item.attachment && item.attachment.path){ item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path)); }
+      await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+  }catch(e){
+    console.warn('Preview send failed, falling back to text', e);
+    await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
+  }
+}
+
+async function handleSkip(chatId, s){
+  if(!s) return;
+  if(s.step === 'date'){
+    s.data.date = safeDateISO('');
+    s.step = 'count';
+    return bot.sendMessage(chatId, 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip', { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'count'){
+    s.data.count = null;
+    s.step = 'location';
+    const opts = { reply_markup:{ keyboard:[[{ text:'Send my location', request_location:true }],[{ text:'Type location' }]], one_time_keyboard:true } };
+    return bot.sendMessage(chatId, 'Please share location or type a location name', opts);
+  }
+  if(s.step === 'location'){
+    s.data.location = s.data.location || '';
+    s.step = 'attachment';
+    return bot.sendMessage(chatId, 'Skipping location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } });
+  }
+  if(s.step === 'attachment'){
+    s.data.attachment = null;
+    s.step = 'note';
+    return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)', { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'note'){
+    s.data.note = '';
+    return sendPreview(chatId, s);
+  }
+}
+
 function downloadFile(fileId, destPath){
   return bot.getFileLink(fileId).then(url => new Promise((resolve,reject)=>{
     const file = fs.createWriteStream(destPath);
@@ -176,6 +278,14 @@ bot.onText(/\/help/, (msg)=>{
 
 bot.onText(/\/new/, (msg)=> beginGuidedFlow(msg));
 bot.onText(/\/cancel/, (msg)=>{ endSession(msg.chat.id); bot.sendMessage(msg.chat.id, 'Canceled.'); });
+
+// Allow skipping steps in the guided flow from any step.
+bot.onText(/\/skip(?:@\w+)?/i, (msg)=>{
+  const chatId = msg.chat.id;
+  const s = sessions[chatId];
+  if(!s) return;
+  handleSkip(chatId, s).catch(()=>{});
+});
 
 bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
   if(!isAllowed(msg.from.id)) return bot.sendMessage(msg.chat.id, 'Not authorized');
@@ -228,6 +338,11 @@ bot.on('message', async (msg)=>{
     }
     if(s.step==='date'){
       const raw = (msg.text||'').trim();
+      if(isSkipText(raw)){
+        s.data.date = safeDateISO('');
+        s.step = 'count';
+        return bot.sendMessage(chatId, 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip', { reply_markup:{ force_reply:true } });
+      }
       const parsed = parseFlexibleDate(raw);
       if(parsed){
         s.data.date = parsed;
@@ -238,8 +353,22 @@ bot.on('message', async (msg)=>{
       s.step = 'count';
       return bot.sendMessage(chatId, 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip', { reply_markup:{ force_reply:true } });
     }
-    if(s.step==='count'){ s.data.count = msg.text? (isNaN(Number(msg.text))?msg.text:Number(msg.text)) : null; s.step='location'; const opts = { reply_markup:{ keyboard:[[{ text:'Send my location', request_location:true }],[{ text:'Type location' }]], one_time_keyboard:true } }; return bot.sendMessage(chatId, 'Please share location or type a location name', opts); }
+    if(s.step==='count'){
+      if(isSkipText(msg.text)){
+        s.data.count = null;
+      } else {
+        s.data.count = parseCountInput(msg.text);
+      }
+      s.step='location';
+      const opts = { reply_markup:{ keyboard:[[{ text:'Send my location', request_location:true }],[{ text:'Type location' }]], one_time_keyboard:true } };
+      return bot.sendMessage(chatId, 'Please share location or type a location name', opts);
+    }
     if(s.step==='location'){
+      if(isSkipText(msg.text)){
+        s.data.location = s.data.location || '';
+        s.step = 'attachment';
+        return bot.sendMessage(chatId, 'Skipping location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } });
+      }
       if(msg.location){ s.data.lat = msg.location.latitude; s.data.lng = msg.location.longitude; s.data.location = 'Shared location'; s.step='attachment'; return bot.sendMessage(chatId, 'Location set from your shared location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } }); }
       if(msg.text && msg.text!=='Send my location' && msg.text!=='Type location'){
         const typed = msg.text.trim(); // try to geocode
@@ -251,51 +380,19 @@ bot.on('message', async (msg)=>{
       return bot.sendMessage(chatId, 'Tap Send my location or type location name');
     }
     if(s.step==='attachment'){
+      // If user sends text like "skip" or "/skip@bot" treat it as skip.
       if(msg.photo && msg.photo.length){ const fileId = msg.photo[msg.photo.length-1].file_id; const filename = path.join(UPLOADS_DIR, fileId + '.jpg'); try{ await downloadFile(fileId, filename); s.data.attachment={type:'photo',path:filename,fileId}; }catch(e){ s.data.attachment={type:'photo',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Photo saved. Add an optional note (or type /skip). Tip: use full-resolution images for best results.'); }
       if(msg.document){ const fileId=msg.document.file_id; const filename = path.join(UPLOADS_DIR, msg.document.file_name||fileId); try{ await downloadFile(fileId, filename); s.data.attachment={type:'doc',path:filename,fileId}; }catch(e){ s.data.attachment={type:'doc',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Document saved. Any note? (or /skip)'); }
-      if(msg.text && msg.text.toLowerCase()==='/skip'){ s.step='note'; return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)'); }
+      if(msg.text && isSkipText(msg.text)){ s.step='note'; return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)', { reply_markup:{ force_reply:true } }); }
       return bot.sendMessage(chatId, 'Send a photo/document or type /skip');
     }
     if(s.step==='note'){
-      if(msg.text && msg.text.toLowerCase()==='/skip') s.data.note=''; else s.data.note = msg.text||'';
-      // build preview but do not save yet
-      const item = {
-        id: makeId(),
-        title: s.data.title,
-        date: safeDateISO(s.data.date),
-        count: s.data.count,
-        location: s.data.location,
-        lat: s.data.lat,
-        lng: s.data.lng,
-        note: s.data.note,
-        attachment: s.data.attachment||null
-      };
-      // store pending item in session and move to confirming step
-      s.pending = item;
-      s.step = 'confirming';
-      // compose preview text (use localized date formatting when possible)
-      // show preview date in UTC per user preference
-      const displayDate = item.date ? formatDateUTC(item.date) : (item.dateRaw || '');
-      let preview = `*Preview activity*\n\n*Title:* ${escapeMarkdown(item.title)}\n*Date:* ${escapeMarkdown(displayDate)}\n*Count:* ${escapeMarkdown(String(item.count||''))}\n*Location:* ${escapeMarkdown(String(item.location||''))}`;
-      if(item.lat && item.lng) preview += `\n*Coords:* ${item.lat}, ${item.lng}`;
-      if(item.note) preview += `\n\n*Note:* ${escapeMarkdown(item.note)}`;
-      if(item.attachment && item.attachment.type) preview += `\n\n_Attachment:_ ${escapeMarkdown(item.attachment.type)}`;
-      // send preview with inline Confirm / Cancel. If photo attachment exists and was downloaded, send as photo with caption for visual preview.
-      const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
-      try{
-        if(item.attachment && item.attachment.type === 'photo' && item.attachment.path && fs.existsSync(item.attachment.path)){
-          // include webPath metadata for client rendering
-          item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path));
-          await bot.sendPhoto(chatId, item.attachment.path, { caption: preview, parse_mode: 'Markdown', reply_markup: keyboard });
-        } else {
-          if(item.attachment && item.attachment.path){ item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path)); }
-          await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
-        }
-      }catch(e){
-        console.warn('Preview send failed, falling back to text', e);
-        await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
-      }
-      return;
+      // Accept plain "skip" and "/skip@bot". Also accept captions if user sends a photo/doc here.
+      if(msg.text && isSkipText(msg.text)) s.data.note='';
+      else if(typeof msg.text === 'string') s.data.note = msg.text;
+      else if(typeof msg.caption === 'string') s.data.note = msg.caption;
+      else s.data.note = '';
+      return sendPreview(chatId, s);
     }
   }catch(e){ console.error('session error', e); bot.sendMessage(chatId, 'Error occurred, session canceled'); endSession(chatId); }
 });
