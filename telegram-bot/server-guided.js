@@ -18,10 +18,84 @@ if(!TOKEN){
 }
 
 const ALLOWED = (process.env.ALLOWED_TELEGRAM_IDS || '').split(',').map(s=>s.trim()).filter(Boolean).map(Number);
+// Optional: announce saved activities to a Telegram channel/chat.
+// Set TELEGRAM_CHANNEL_ID (e.g. -1001234567890 or @yourchannelusername)
+const ANNOUNCE_CHAT_ID = (process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_ANNOUNCE_CHAT_ID || '').trim();
 const bot = new TelegramBot(TOKEN, { polling: true });
 const ACTIVITIES_PATH = path.resolve(__dirname, '..', 'activities.json');
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+function escapeHtml(s){
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildAnnouncementText(item, action){
+  const title = item && item.title ? String(item.title) : 'Activity';
+  const dateText = item && item.date ? formatDateUTC(item.date) : (item && item.dateRaw ? String(item.dateRaw) : '');
+  const countText = (item && item.count != null && String(item.count).trim() !== '') ? String(item.count) : '';
+  const locationText = item && item.location ? String(item.location) : '';
+  const coordsText = (item && typeof item.lat === 'number' && typeof item.lng === 'number') ? `${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}` : '';
+  const noteText = item && item.note ? String(item.note) : '';
+  const idText = (item && item.id != null && String(item.id).trim() !== '') ? String(item.id) : '';
+
+  const lines = [];
+  lines.push(`<b>${escapeHtml(action || 'Activity')}</b>`);
+  lines.push(`<b>Title:</b> ${escapeHtml(title)}`);
+  if(dateText) lines.push(`<b>Date:</b> ${escapeHtml(dateText)}`);
+  if(countText) lines.push(`<b>Count:</b> ${escapeHtml(countText)}`);
+  if(locationText) lines.push(`<b>Location:</b> ${escapeHtml(locationText)}`);
+  if(coordsText) lines.push(`<b>Coords:</b> ${escapeHtml(coordsText)}`);
+  if(noteText) lines.push(`<b>Note:</b> ${escapeHtml(noteText)}`);
+  if(idText) lines.push(`<b>ID:</b> ${escapeHtml(idText)}`);
+  return lines.join('\n');
+}
+
+function getAttachmentSendTarget(item){
+  const a = item && item.attachment ? item.attachment : null;
+  // Prefer Telegram file_id (best reliability)
+  if(a && a.fileId) return { kind: a.type || 'photo', target: a.fileId };
+
+  // Then local file path
+  if(a && a.path && fs.existsSync(a.path)) return { kind: a.type || 'photo', target: fs.createReadStream(a.path) };
+
+  // Then a public URL, if stored
+  const url = (a && a.webPath && /^https?:\/\//i.test(String(a.webPath))) ? String(a.webPath) :
+              (item && item.attachment_url && /^https?:\/\//i.test(String(item.attachment_url))) ? String(item.attachment_url) : '';
+  if(url) return { kind: (a && a.type) ? String(a.type) : ((item && item.attachment_type) ? String(item.attachment_type) : 'photo'), target: url };
+
+  return null;
+}
+
+async function announceToChannelIfConfigured(item, action){
+  if(!ANNOUNCE_CHAT_ID) return;
+  const text = buildAnnouncementText(item, action);
+  const attachment = getAttachmentSendTarget(item);
+
+  try{
+    if(attachment){
+      const kind = String(attachment.kind || 'photo');
+      // Telegram caption is limited; keep it safe.
+      const caption = text.length > 950 ? (text.slice(0, 947) + '…') : text;
+      if(kind === 'doc' || kind === 'document'){
+        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+      } else {
+        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+      }
+      if(text.length > caption.length){
+        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+      }
+      return;
+    }
+
+    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+  }catch(e){
+    console.warn('Channel announce failed (check TELEGRAM_CHANNEL_ID and bot permissions):', e && (e.response && e.response.body ? e.response.body : e.message || e));
+  }
+}
 
 // --- Neon/Postgres support ---
 const DB_URL = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL || '';
@@ -641,7 +715,8 @@ bot.on('callback_query', async (cq) => {
         if((session.mode || 'create') === 'edit'){
           await updateActivityInDb(item.id, item);
         } else {
-          await insertActivityToDb(item);
+          const newId = await insertActivityToDb(item);
+          if(newId != null) item.id = newId;
         }
       } else {
         const arr = loadActivities();
@@ -656,8 +731,16 @@ bot.on('callback_query', async (cq) => {
       }
 
       await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id });
-    const savedDateText = item.date ? formatDateUTC(item.date) : (item.dateRaw || item.date || '');
-    await bot.sendMessage(chatId, ((session.mode || 'create') === 'edit' ? 'Activity updated: ' : 'Activity saved: ') + item.title + ' — ' + savedDateText + (dbEnabled() ? ' (Neon)' : ' (local file)'));
+
+      // Optional: announce to a channel/chat
+      if((session.mode || 'create') === 'edit'){
+        await announceToChannelIfConfigured(item, 'Activity updated');
+      } else {
+        await announceToChannelIfConfigured(item, 'New activity');
+      }
+
+      const savedDateText = item.date ? formatDateUTC(item.date) : (item.dateRaw || item.date || '');
+      await bot.sendMessage(chatId, ((session.mode || 'create') === 'edit' ? 'Activity updated: ' : 'Activity saved: ') + item.title + ' — ' + savedDateText + (dbEnabled() ? ' (Neon)' : ' (local file)'));
       await bot.answerCallbackQuery(cq.id, { text: 'Saved' });
       endSession(chatId);
       return;
