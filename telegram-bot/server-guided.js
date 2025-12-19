@@ -74,6 +74,65 @@ async function listActivitiesFromDb(limit){
   return res.rows || [];
 }
 
+async function getActivityFromDbById(id){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  const q = `SELECT id,
+                    title,
+                    note,
+                    COALESCE(activity_date, created_at) AS date,
+                    count,
+                    location,
+                    latitude AS lat,
+                    longitude AS lng,
+                    attachment_url,
+                    attachment_type
+             FROM activities
+             WHERE id = $1`;
+  const r = await pool.query(q, [id]);
+  return (r.rows && r.rows[0]) ? r.rows[0] : null;
+}
+
+async function updateActivityInDb(id, item){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  const sql = `UPDATE activities SET
+      title = $2,
+      note = $3,
+      activity_date = $4,
+      count = $5,
+      location = $6,
+      latitude = $7,
+      longitude = $8,
+      attachment_url = $9,
+      attachment_type = $10,
+      raw = $11
+    WHERE id = $1
+    RETURNING id`;
+  const vals = [
+    id,
+    item.title || 'Activity',
+    item.note || null,
+    item.date ? new Date(item.date).toISOString() : null,
+    item.count == null ? null : String(item.count),
+    item.location || null,
+    (typeof item.lat === 'number') ? item.lat : null,
+    (typeof item.lng === 'number') ? item.lng : null,
+    (item.attachment && item.attachment.webPath && /^https?:\/\//i.test(String(item.attachment.webPath))) ? String(item.attachment.webPath) : (item.attachment_url || null),
+    (item.attachment && item.attachment.type) ? String(item.attachment.type) : (item.attachment_type || null),
+    item ? JSON.stringify(item) : null
+  ];
+  const r = await pool.query(sql, vals);
+  return r.rows && r.rows[0] ? r.rows[0].id : null;
+}
+
+async function deleteActivityFromDb(id){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  const r = await pool.query('DELETE FROM activities WHERE id = $1 RETURNING id', [id]);
+  return r.rows && r.rows[0] ? r.rows[0].id : null;
+}
+
 function loadActivities(){
   try{ return JSON.parse(fs.readFileSync(ACTIVITIES_PATH, 'utf8')); }catch(e){ return []; }
 }
@@ -145,7 +204,7 @@ function geocodeLocation(query){
 }
 
 const sessions = {};
-function startSession(chatId, userId){ sessions[chatId] = { userId, step:'title', data:{} }; }
+function startSession(chatId, userId, mode){ sessions[chatId] = { userId, mode: mode || 'create', step:'title', data:{} }; }
 function endSession(chatId){ delete sessions[chatId]; }
 
 function normalizeText(s){
@@ -186,7 +245,7 @@ function parseCountInput(raw){
 
 async function sendPreview(chatId, s){
   const item = {
-    id: makeId(),
+    id: s.data.id || makeId(),
     title: s.data.title,
     date: safeDateISO(s.data.date),
     count: s.data.count,
@@ -265,13 +324,114 @@ function escapeMarkdown(text){
 function beginGuidedFlow(msg){
   const chatId = msg.chat.id;
   if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'You are not authorized to use guided input.');
-  startSession(chatId, msg.from.id);
+  startSession(chatId, msg.from.id, 'create');
   bot.sendMessage(chatId, "Let's create a new activity. What is the title? (e.g. 'Quran distribution — Village X')", { reply_markup:{ force_reply:true } });
+}
+
+function stepPrev(step){
+  const map = {
+    confirming: 'note',
+    note: 'attachment',
+    attachment: 'location',
+    location: 'count',
+    count: 'date',
+    date: 'title'
+  };
+  return map[step] || '';
+}
+
+async function promptForStep(chatId, s){
+  const mode = s.mode || 'create';
+  if(s.step === 'title'){
+    const cur = mode === 'edit' ? (s.data.title || '') : '';
+    const msg = mode === 'edit'
+      ? `Editing activity. Current title: ${cur ? '"' + cur + '"' : '(empty)'}\nSend new title (or /skip to keep).`
+      : "Let's create a new activity. What is the title? (e.g. 'Quran distribution — Village X')";
+    return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'date'){
+    const cur = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
+    const msg = mode === 'edit'
+      ? `Current date: ${cur || '(empty)'}\nSend new date/time (or /skip to keep).`
+      : 'Date/time (examples: 2025-12-20, 2025-12-20 14:30, Dec 20 2025). Leave empty to use current time.';
+    return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'count'){
+    const cur = (s.data.count == null) ? '' : String(s.data.count);
+    const msg = mode === 'edit'
+      ? `Current count: ${cur || '(empty)'}\nSend new count (e.g. 1200 or "1,200 Mushaf"), or /skip to keep.`
+      : 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip';
+    return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'location'){
+    const cur = s.data.location || '';
+    const msg = mode === 'edit'
+      ? `Current location: ${cur || '(empty)'}\nShare Telegram location or type a new location, or /skip to keep.`
+      : 'Please share location or type a location name';
+    const opts = { reply_markup:{ keyboard:[[{ text:'Send my location', request_location:true }],[{ text:'Type location' }]], one_time_keyboard:true } };
+    return bot.sendMessage(chatId, msg, opts);
+  }
+  if(s.step === 'attachment'){
+    const has = Boolean(s.data.attachment);
+    const msg = (mode === 'edit')
+      ? `Attachment: ${has ? 'currently set' : 'none'}. Send a new photo/doc to replace, or /skip to keep.`
+      : 'Attach a photo/doc or type /skip';
+    return bot.sendMessage(chatId, msg, { reply_markup:{ remove_keyboard:true } });
+  }
+  if(s.step === 'note'){
+    const cur = s.data.note || '';
+    const msg = (mode === 'edit')
+      ? `Current note: ${cur ? '"' + cur + '"' : '(empty)'}\nSend new note (or /skip to keep).`
+      : 'Any note? (or /skip)';
+    return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+}
+
+async function beginEditFlow(msg, id){
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  if(sessions[chatId]) return bot.sendMessage(chatId, 'You are already in a session. Type /cancel to stop it first.');
+  const activityId = normalizeText(id);
+  if(!activityId) return bot.sendMessage(chatId, 'Usage: /edit <id> (get the id from /list)');
+
+  try{
+    let existing = null;
+    if(dbEnabled()){
+      existing = await getActivityFromDbById(activityId);
+    } else {
+      const arr = loadActivities();
+      existing = arr.find(a => String(a.id) === activityId) || null;
+    }
+    if(!existing) return bot.sendMessage(chatId, 'Not found: ' + activityId);
+
+    startSession(chatId, msg.from.id, 'edit');
+    const s = sessions[chatId];
+    // seed session data with existing values so /skip keeps them
+    s.data.id = existing.id;
+    s.data.title = existing.title || '';
+    s.data.note = existing.note || existing.desc || '';
+    s.data.date = existing.date ? safeDateISO(existing.date) : (existing.activity_date ? safeDateISO(existing.activity_date) : safeDateISO(''));
+    s.data.count = (existing.count == null) ? null : existing.count;
+    s.data.location = existing.location || '';
+    s.data.lat = (typeof existing.lat === 'number') ? existing.lat : (existing.latitude || null);
+    s.data.lng = (typeof existing.lng === 'number') ? existing.lng : (existing.longitude || null);
+    // keep attachment if present (DB returns attachment_url/type)
+    if(existing.attachment_url || existing.attachment_type){
+      s.data.attachment = { type: existing.attachment_type || 'photo', webPath: existing.attachment_url || '' };
+    } else if(existing.attachment){
+      s.data.attachment = existing.attachment;
+    }
+    s.step = 'title';
+    return promptForStep(chatId, s);
+  }catch(e){
+    console.error('edit flow begin failed', e);
+    return bot.sendMessage(chatId, 'Edit failed: ' + (e.message || e));
+  }
 }
 
 bot.onText(/\/start/, (msg)=> bot.sendMessage(msg.chat.id, 'Activity bot ready. Use /help. Use /new for guided input.'));
 bot.onText(/\/help/, (msg)=>{
-  const help = `/new - guided input\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent\n/cancel - cancel guided input\n
+  const help = `/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
    During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
   bot.sendMessage(msg.chat.id, help);
 });
@@ -285,6 +445,46 @@ bot.onText(/\/skip(?:@\w+)?/i, (msg)=>{
   const s = sessions[chatId];
   if(!s) return;
   handleSkip(chatId, s).catch(()=>{});
+});
+
+bot.onText(/\/back(?:@\w+)?/i, (msg)=>{
+  const chatId = msg.chat.id;
+  const s = sessions[chatId];
+  if(!s) return;
+  const prev = stepPrev(s.step);
+  if(!prev) return bot.sendMessage(chatId, 'Already at the first step.');
+  s.step = prev;
+  promptForStep(chatId, s).catch(()=>{});
+});
+
+bot.onText(/\/edit\s+([\s\S]+)/i, (msg, match)=>{
+  return beginEditFlow(msg, match && match[1]);
+});
+
+bot.onText(/\/delete\s+([\s\S]+)/i, (msg, match)=>{
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  if(sessions[chatId]) return bot.sendMessage(chatId, 'You are in a session. Type /cancel first.');
+  const id = normalizeText(match && match[1]);
+  if(!id) return bot.sendMessage(chatId, 'Usage: /delete <id> (get the id from /list)');
+  (async function(){
+    try{
+      if(dbEnabled()){
+        const deleted = await deleteActivityFromDb(id);
+        if(!deleted) return bot.sendMessage(chatId, 'Not found: ' + id);
+        return bot.sendMessage(chatId, 'Deleted: ' + deleted + ' (Neon)');
+      }
+      const arr = loadActivities();
+      const before = arr.length;
+      const next = arr.filter(a => String(a.id) !== id);
+      if(next.length === before) return bot.sendMessage(chatId, 'Not found: ' + id);
+      saveActivities(next);
+      return bot.sendMessage(chatId, 'Deleted: ' + id + ' (local file)');
+    }catch(e){
+      console.error('Delete failed', e);
+      return bot.sendMessage(chatId, 'Delete failed: ' + (e.message || e));
+    }
+  })();
 });
 
 bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
@@ -315,11 +515,14 @@ bot.onText(/\/list/, (msg)=>{
     try{
       if(dbEnabled()){
         const rows = await listActivitiesFromDb(10);
-        const lines = rows.map(r=>`${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`);
+        const lines = rows.map(r=>{
+          const sid = String(r.id || '').slice(0, 8);
+          return `${sid} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
+        });
         return bot.sendMessage(msg.chat.id, lines.join('\n') || 'No activities');
       }
       const arr = loadActivities();
-      const lines = arr.slice(-10).reverse().map(i=>`${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
+      const lines = arr.slice(-10).reverse().map(i=>`${String(i.id||'').slice(0,8)} — ${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
       return bot.sendMessage(msg.chat.id, lines.join('\n')||'No activities');
     }catch(e){
       console.error('List failed', e);
@@ -331,17 +534,24 @@ bot.onText(/\/list/, (msg)=>{
 bot.on('message', async (msg)=>{
   const chatId = msg.chat.id; if(msg.edit_date) return; const s = sessions[chatId]; if(!s) return;
   try{
+    // Commands are handled by onText handlers; avoid double-processing in the step machine.
+    if(msg.text && /^\/(start|help|new|cancel|skip|back|edit|delete|add|list)\b/i.test(msg.text)) return;
+
     if(s.step==='title'){
-      s.data.title = msg.text || msg.caption || 'Untitled';
+      if(isSkipText(msg.text) && s.mode === 'edit'){
+        // keep current
+      } else {
+        s.data.title = msg.text || msg.caption || s.data.title || 'Untitled';
+      }
       s.step = 'date';
-      return bot.sendMessage(chatId, 'Date/time (examples: 2025-12-20, 2025-12-20 14:30, Dec 20 2025). Leave empty to use current time.', { reply_markup:{ force_reply:true } });
+      return promptForStep(chatId, s);
     }
     if(s.step==='date'){
       const raw = (msg.text||'').trim();
       if(isSkipText(raw)){
-        s.data.date = safeDateISO('');
+        if(s.mode !== 'edit') s.data.date = safeDateISO('');
         s.step = 'count';
-        return bot.sendMessage(chatId, 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip', { reply_markup:{ force_reply:true } });
+        return promptForStep(chatId, s);
       }
       const parsed = parseFlexibleDate(raw);
       if(parsed){
@@ -351,23 +561,24 @@ bot.on('message', async (msg)=>{
         s.data.dateRaw = raw; // preserve original when parsing is uncertain
       }
       s.step = 'count';
-      return bot.sendMessage(chatId, 'Count (number) or text — e.g. 1200 or "1,200 Mushaf". If unknown, type 0 or /skip', { reply_markup:{ force_reply:true } });
+      return promptForStep(chatId, s);
     }
     if(s.step==='count'){
       if(isSkipText(msg.text)){
-        s.data.count = null;
+        // keep existing when editing, else clear
+        if(s.mode !== 'edit') s.data.count = null;
       } else {
         s.data.count = parseCountInput(msg.text);
       }
       s.step='location';
-      const opts = { reply_markup:{ keyboard:[[{ text:'Send my location', request_location:true }],[{ text:'Type location' }]], one_time_keyboard:true } };
-      return bot.sendMessage(chatId, 'Please share location or type a location name', opts);
+      return promptForStep(chatId, s);
     }
     if(s.step==='location'){
       if(isSkipText(msg.text)){
-        s.data.location = s.data.location || '';
+        // keep existing when editing; otherwise blank
+        if(s.mode !== 'edit') s.data.location = '';
         s.step = 'attachment';
-        return bot.sendMessage(chatId, 'Skipping location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } });
+        return promptForStep(chatId, s);
       }
       if(msg.location){ s.data.lat = msg.location.latitude; s.data.lng = msg.location.longitude; s.data.location = 'Shared location'; s.step='attachment'; return bot.sendMessage(chatId, 'Location set from your shared location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } }); }
       if(msg.text && msg.text!=='Send my location' && msg.text!=='Type location'){
@@ -383,15 +594,25 @@ bot.on('message', async (msg)=>{
       // If user sends text like "skip" or "/skip@bot" treat it as skip.
       if(msg.photo && msg.photo.length){ const fileId = msg.photo[msg.photo.length-1].file_id; const filename = path.join(UPLOADS_DIR, fileId + '.jpg'); try{ await downloadFile(fileId, filename); s.data.attachment={type:'photo',path:filename,fileId}; }catch(e){ s.data.attachment={type:'photo',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Photo saved. Add an optional note (or type /skip). Tip: use full-resolution images for best results.'); }
       if(msg.document){ const fileId=msg.document.file_id; const filename = path.join(UPLOADS_DIR, msg.document.file_name||fileId); try{ await downloadFile(fileId, filename); s.data.attachment={type:'doc',path:filename,fileId}; }catch(e){ s.data.attachment={type:'doc',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Document saved. Any note? (or /skip)'); }
-      if(msg.text && isSkipText(msg.text)){ s.step='note'; return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)', { reply_markup:{ force_reply:true } }); }
+      if(msg.text && isSkipText(msg.text)){
+        // keep existing when editing; otherwise clear
+        if(s.mode !== 'edit') s.data.attachment = null;
+        s.step='note';
+        return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)', { reply_markup:{ force_reply:true } });
+      }
       return bot.sendMessage(chatId, 'Send a photo/document or type /skip');
     }
     if(s.step==='note'){
       // Accept plain "skip" and "/skip@bot". Also accept captions if user sends a photo/doc here.
-      if(msg.text && isSkipText(msg.text)) s.data.note='';
-      else if(typeof msg.text === 'string') s.data.note = msg.text;
-      else if(typeof msg.caption === 'string') s.data.note = msg.caption;
-      else s.data.note = '';
+      if(msg.text && isSkipText(msg.text)){
+        if(s.mode !== 'edit') s.data.note='';
+      } else if(typeof msg.text === 'string'){
+        s.data.note = msg.text;
+      } else if(typeof msg.caption === 'string'){
+        s.data.note = msg.caption;
+      } else {
+        s.data.note = s.data.note || '';
+      }
       return sendPreview(chatId, s);
     }
   }catch(e){ console.error('session error', e); bot.sendMessage(chatId, 'Error occurred, session canceled'); endSession(chatId); }
@@ -417,14 +638,26 @@ bot.on('callback_query', async (cq) => {
 
       // Save to Neon DB if configured; otherwise save to local activities.json
       if(dbEnabled()){
-        await insertActivityToDb(item);
+        if((session.mode || 'create') === 'edit'){
+          await updateActivityInDb(item.id, item);
+        } else {
+          await insertActivityToDb(item);
+        }
       } else {
-        const arr = loadActivities(); arr.push(item); arr.sort((a,b)=> new Date(a.date)-new Date(b.date)); saveActivities(arr);
+        const arr = loadActivities();
+        if((session.mode || 'create') === 'edit'){
+          const idx = arr.findIndex(a => String(a.id) === String(item.id));
+          if(idx >= 0) arr[idx] = item; else arr.push(item);
+        } else {
+          arr.push(item);
+        }
+        arr.sort((a,b)=> new Date(a.date)-new Date(b.date));
+        saveActivities(arr);
       }
 
       await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id });
     const savedDateText = item.date ? formatDateUTC(item.date) : (item.dateRaw || item.date || '');
-    await bot.sendMessage(chatId, 'Activity saved: ' + item.title + ' — ' + savedDateText + (dbEnabled() ? ' (Neon)' : ' (local file)'));
+    await bot.sendMessage(chatId, ((session.mode || 'create') === 'edit' ? 'Activity updated: ' : 'Activity saved: ') + item.title + ' — ' + savedDateText + (dbEnabled() ? ' (Neon)' : ' (local file)'));
       await bot.answerCallbackQuery(cq.id, { text: 'Saved' });
       endSession(chatId);
       return;
