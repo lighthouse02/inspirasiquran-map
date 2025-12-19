@@ -676,7 +676,32 @@
 
         function applyFilter(){
           const maxT = parseInt(timelineRange.value);
-          timelineLabel.textContent = new Date(maxT).toLocaleString();
+          // Update timeline label to show counts for the selected time bucket
+          try{
+            var total = (lastItems && lastItems.length) ? lastItems.length : 0;
+            var visible = 0;
+            if(total){
+              visible = (lastItems || []).filter(function(i){
+                var ts = (i._ts || (i.date && (i.date.getTime ? i.date.getTime() : new Date(i.date).getTime())) || 0);
+                return ts <= maxT;
+              }).length;
+            }
+            var labelText;
+            if(total === 0){
+              labelText = 'No activities';
+            } else if(visible === total){
+              labelText = 'All (' + total + ')';
+            } else {
+              labelText = visible + ' / ' + total + ' activities · ' + new Date(maxT).toLocaleString();
+            }
+            // write to the preferred page-level label and also update the in-map label if present
+            try{ if(timelineLabel) timelineLabel.textContent = labelText; }catch(e){}
+            try{ var inMapLabel = document.getElementById('mapTimelineLabel'); if(inMapLabel) inMapLabel.textContent = labelText; }catch(e){}
+          }catch(e){
+            // fallback to date when anything goes wrong
+            try{ var fallback = new Date(maxT).toLocaleString(); if(timelineLabel) timelineLabel.textContent = fallback; var inMapLabel = document.getElementById('mapTimelineLabel'); if(inMapLabel) inMapLabel.textContent = fallback; }catch(_){ if(timelineLabel) timelineLabel.textContent = 'Timeline'; }
+          }
+
           // feed items
           Array.from(feedUL.children).forEach(li=>{
             const ts = parseInt(li.getAttribute('data-ts') || li._ts || 0);
