@@ -1,0 +1,2 @@
+# Ignore the Telegram bot token file (contains sensitive token)
+telegram-bot/telegram token.txt
