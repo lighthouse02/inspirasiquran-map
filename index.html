@@ -213,8 +213,9 @@
     </script>
     <script>
     // Activities loader: fetch activities.json, render feed and markers, and wire timeline filtering
-    (function(){
-      const ACTIVITIES_URL = '/activities.json';
+      (function(){
+        // switched to Netlify function backend (Neon DB) — deploy function and set DATABASE_URL in Netlify env
+        const ACTIVITIES_URL = '/.netlify/functions/get-activities';
       let feedUL = document.getElementById('activityFeed');
       // We'll create an in-map control for the feed/timeline; keep the external feed as fallback
       const activityWrap = document.querySelector('.activity-wrap');
