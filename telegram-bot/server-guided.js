@@ -3,6 +3,14 @@ const path = require('path');
 const https = require('https');
 const TelegramBot = require('node-telegram-bot-api');
 
+let Pool = null;
+try{
+  ({ Pool } = require('pg'));
+}catch(e){
+  // optional dependency; bot can still run in file-backed mode
+  Pool = null;
+}
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if(!TOKEN){
   console.error('Please set TELEGRAM_BOT_TOKEN environment variable');
@@ -14,6 +22,57 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 const ACTIVITIES_PATH = path.resolve(__dirname, '..', 'activities.json');
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// --- Neon/Postgres support ---
+const DB_URL = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL || '';
+let _dbPool = null;
+
+function dbEnabled(){
+  return Boolean(DB_URL && Pool);
+}
+
+function getDbPool(){
+  if(!dbEnabled()) return null;
+  if(_dbPool) return _dbPool;
+  _dbPool = new Pool({ connectionString: DB_URL });
+  return _dbPool;
+}
+
+async function insertActivityToDb(item){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  const sql = `INSERT INTO activities(
+      title, note, activity_date, count, location, latitude, longitude, attachment_url, attachment_type, raw
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    RETURNING id`;
+  const vals = [
+    item.title || 'Activity',
+    item.note || null,
+    item.date ? new Date(item.date).toISOString() : null,
+    item.count == null ? null : String(item.count),
+    item.location || null,
+    (typeof item.lat === 'number') ? item.lat : null,
+    (typeof item.lng === 'number') ? item.lng : null,
+    // Only store an attachment URL if it is already a public URL (http/https).
+    (item.attachment && item.attachment.webPath && /^https?:\/\//i.test(String(item.attachment.webPath))) ? String(item.attachment.webPath) : null,
+    (item.attachment && item.attachment.type) ? String(item.attachment.type) : null,
+    item ? JSON.stringify(item) : null
+  ];
+  const r = await pool.query(sql, vals);
+  return r.rows && r.rows[0] ? r.rows[0].id : null;
+}
+
+async function listActivitiesFromDb(limit){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  const l = Math.max(1, Math.min(Number(limit || 10), 50));
+  const q = `SELECT id, title, COALESCE(activity_date, created_at) AS date, count, location
+             FROM activities
+             ORDER BY COALESCE(activity_date, created_at) DESC
+             LIMIT $1`;
+  const res = await pool.query(q, [l]);
+  return res.rows || [];
+}
 
 function loadActivities(){
   try{ return JSON.parse(fs.readFileSync(ACTIVITIES_PATH, 'utf8')); }catch(e){ return []; }
@@ -120,18 +179,43 @@ bot.onText(/\/cancel/, (msg)=>{ endSession(msg.chat.id); bot.sendMessage(msg.cha
 
 bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
   if(!isAllowed(msg.from.id)) return bot.sendMessage(msg.chat.id, 'Not authorized');
-  try{
-    const parts = match[1].trim().split('|').map(s=>s.trim());
-    const [title, dateStr, countStr, location, latlng, note] = parts;
-    const item = { id: makeId(), title: title||'Activity', date: safeDateISO(dateStr||''), count: countStr? (isNaN(Number(countStr))?countStr:Number(countStr)) : null, location: location||'', note: note||'' };
-    if(latlng){ const m = latlng.split(/[ ,;]+/).map(Number); if(m.length>=2) { item.lat = m[0]; item.lng = m[1]; } }
-    const arr = loadActivities(); arr.push(item); arr.sort((a,b)=> new Date(a.date)-new Date(b.date)); saveActivities(arr);
-    bot.sendMessage(msg.chat.id, 'Added: ' + item.title);
-  }catch(e){ bot.sendMessage(msg.chat.id, 'Add failed'); }
+  (async function(){
+    try{
+      const parts = match[1].trim().split('|').map(s=>s.trim());
+      const [title, dateStr, countStr, location, latlng, note] = parts;
+      const item = { id: makeId(), title: title||'Activity', date: safeDateISO(dateStr||''), count: countStr? (isNaN(Number(countStr))?countStr:Number(countStr)) : null, location: location||'', note: note||'' };
+      if(latlng){ const m = latlng.split(/[ ,;]+/).map(Number); if(m.length>=2) { item.lat = m[0]; item.lng = m[1]; } }
+
+      if(dbEnabled()){
+        await insertActivityToDb(item);
+      } else {
+        const arr = loadActivities(); arr.push(item); arr.sort((a,b)=> new Date(a.date)-new Date(b.date)); saveActivities(arr);
+      }
+
+      bot.sendMessage(msg.chat.id, 'Added: ' + item.title);
+    }catch(e){
+      console.error('Add failed', e);
+      bot.sendMessage(msg.chat.id, 'Add failed: ' + (e.message || e));
+    }
+  })();
 });
 
 bot.onText(/\/list/, (msg)=>{
-  const arr = loadActivities(); const lines = arr.slice(-10).reverse().map(i=>`${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`); bot.sendMessage(msg.chat.id, lines.join('\n')||'No activities');
+  (async function(){
+    try{
+      if(dbEnabled()){
+        const rows = await listActivitiesFromDb(10);
+        const lines = rows.map(r=>`${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`);
+        return bot.sendMessage(msg.chat.id, lines.join('\n') || 'No activities');
+      }
+      const arr = loadActivities();
+      const lines = arr.slice(-10).reverse().map(i=>`${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
+      return bot.sendMessage(msg.chat.id, lines.join('\n')||'No activities');
+    }catch(e){
+      console.error('List failed', e);
+      return bot.sendMessage(msg.chat.id, 'List failed: ' + (e.message || e));
+    }
+  })();
 });
 
 bot.on('message', async (msg)=>{
@@ -233,10 +317,17 @@ bot.on('callback_query', async (cq) => {
       if(!item){ await bot.answerCallbackQuery(cq.id, { text: 'Nothing to confirm.' }); return; }
       // ensure attachment has webPath for client rendering
       try{ if(item.attachment && item.attachment.path && !item.attachment.webPath){ item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path)); } }catch(e){}
-      const arr = loadActivities(); arr.push(item); arr.sort((a,b)=> new Date(a.date)-new Date(b.date)); saveActivities(arr);
+
+      // Save to Neon DB if configured; otherwise save to local activities.json
+      if(dbEnabled()){
+        await insertActivityToDb(item);
+      } else {
+        const arr = loadActivities(); arr.push(item); arr.sort((a,b)=> new Date(a.date)-new Date(b.date)); saveActivities(arr);
+      }
+
       await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id });
     const savedDateText = item.date ? formatDateUTC(item.date) : (item.dateRaw || item.date || '');
-    await bot.sendMessage(chatId, 'Activity saved: ' + item.title + ' — ' + savedDateText);
+    await bot.sendMessage(chatId, 'Activity saved: ' + item.title + ' — ' + savedDateText + (dbEnabled() ? ' (Neon)' : ' (local file)'));
       await bot.answerCallbackQuery(cq.id, { text: 'Saved' });
       endSession(chatId);
       return;

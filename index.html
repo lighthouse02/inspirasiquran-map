@@ -625,11 +625,18 @@
                   var src = '';
                   try{
                     var raw = it.attachment.webPath || it.attachment.path || '';
-                    raw = String(raw).replace(/\\\\/g, '/').replace(/\\/g,'/');
-                    var parts = raw.split('/');
-                    var bn = parts.pop() || parts.pop();
-                    if(!bn) bn = raw;
-                    src = './telegram-bot/uploads/' + bn;
+                    raw = String(raw);
+                    // If DB returns a public URL (recommended), use it directly.
+                    if(raw.indexOf('http://') === 0 || raw.indexOf('https://') === 0){
+                      src = raw;
+                    } else {
+                      // Back-compat: local file paths from the old bot
+                      raw = raw.replace(/\\\\/g, '/').replace(/\\/g,'/');
+                      var parts = raw.split('/');
+                      var bn = parts.pop() || parts.pop();
+                      if(!bn) bn = raw;
+                      src = './telegram-bot/uploads/' + bn;
+                    }
                   }catch(e){ src = ''; }
                   // render attachment as full-width 16:9 cover (will crop to fill)
                   attachmentHtml = `<div class="attachment-row" style="margin-top:10px;width:100%"><div class="attachment-inner" style="width:100%;position:relative;padding-top:56.25%;overflow:hidden;border-radius:8px;border:1px solid rgba(255,255,255,0.04)"><img class="attachment-img" src="${src}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block;" alt="attachment"/></div></div>`;
