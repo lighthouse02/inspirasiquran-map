@@ -55,6 +55,8 @@ function escapeHtml(s){
     .replace(/>/g, '&gt;');
 }
 
+const BRAND_SIGNATURE_TEXT = 'Telegram @inspirasiquranlive';
+
 function buildAnnouncementText(item, action){
   const title = item && item.title ? String(item.title) : 'Activity';
   const dateText = item && item.date ? formatDateUTC(item.date) : (item && item.dateRaw ? String(item.dateRaw) : '');
@@ -73,6 +75,7 @@ function buildAnnouncementText(item, action){
   if(coordsText) lines.push(`<b>Coords:</b> ${escapeHtml(coordsText)}`);
   if(noteText) lines.push(`<b>Note:</b> ${escapeHtml(noteText)}`);
   if(idText) lines.push(`<b>ID:</b> ${escapeHtml(idText)}`);
+  lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
   return lines.join('\n');
 }
 
@@ -456,6 +459,9 @@ async function sendPreview(chatId, s){
   if(item.lat && item.lng) preview += `\n*Coords:* ${item.lat}, ${item.lng}`;
   if(item.note) preview += `\n\n*Note:* ${escapeMarkdown(item.note)}`;
   if(item.attachment && item.attachment.type) preview += `\n\n_Attachment:_ ${escapeMarkdown(item.attachment.type)}`;
+
+  // Brand footer (monospace)
+  preview += `\n\n\`${BRAND_SIGNATURE_TEXT}\``;
 
   const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
   try{
