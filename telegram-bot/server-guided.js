@@ -11,6 +11,10 @@ try{
   Pool = null;
 }
 
+function isUuidLike(s){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+}
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if(!TOKEN){
   console.error('Please set TELEGRAM_BOT_TOKEN environment variable');
@@ -225,6 +229,29 @@ async function deleteActivityFromDb(id){
   return r.rows && r.rows[0] ? r.rows[0].id : null;
 }
 
+async function resolveDbIdFromPrefix(idOrPrefix){
+  const raw = String(idOrPrefix || '').trim();
+  if(!raw) return '';
+  if(isUuidLike(raw)) return raw;
+  const pool = getDbPool();
+  if(!pool) return raw;
+
+  // normalize to hex-ish prefix
+  const prefix = raw.replace(/[^0-9a-f]/gi, '').slice(0, 32);
+  if(prefix.length < 6) return raw;
+
+  const q = `SELECT id
+             FROM activities
+             WHERE id::text ILIKE $1
+             ORDER BY COALESCE(activity_date, created_at) DESC
+             LIMIT 2`;
+  const r = await pool.query(q, [prefix + '%']);
+  const rows = r.rows || [];
+  if(rows.length === 1) return rows[0].id;
+  if(rows.length > 1) throw new Error('Multiple activities match that ID prefix. Please copy the full ID from /list.');
+  return '';
+}
+
 function loadActivities(){
   try{ return JSON.parse(fs.readFileSync(ACTIVITIES_PATH, 'utf8')); }catch(e){ return []; }
 }
@@ -241,8 +268,8 @@ async function sendRecentList(chatId){
     if(dbEnabled()){
       const rows = await listActivitiesFromDb(10);
       const lines = rows.map(r=>{
-        const sid = String(r.id || '').slice(0, 8);
-        return `${sid} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
+        const fullId = String(r.id || '');
+        return `${fullId} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
       });
       return bot.sendMessage(chatId, lines.join('\n') || 'No activities');
     }
@@ -270,10 +297,15 @@ async function sendMainMenu(chatId){
 async function handleDeleteById(chatId, userId, id){
   if(!isAllowed(userId)) return bot.sendMessage(chatId, 'Not authorized');
   if(sessions[chatId]) return bot.sendMessage(chatId, 'You are in a session. Type /cancel first.');
-  const normalizedId = normalizeText(id);
+  let normalizedId = normalizeText(id);
   if(!normalizedId) return bot.sendMessage(chatId, 'Usage: delete needs an id (get the id from /list)');
   try{
     if(dbEnabled()){
+      if(!isUuidLike(normalizedId)){
+        const resolved = await resolveDbIdFromPrefix(normalizedId);
+        if(!resolved) return bot.sendMessage(chatId, 'Not found: ' + normalizedId);
+        normalizedId = resolved;
+      }
       const deleted = await deleteActivityFromDb(normalizedId);
       if(!deleted) return bot.sendMessage(chatId, 'Not found: ' + normalizedId);
       return bot.sendMessage(chatId, 'Deleted: ' + deleted + ' (Neon)');
@@ -547,8 +579,18 @@ async function beginEditFlow(msg, id){
   const chatId = msg.chat.id;
   if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
   if(sessions[chatId]) return bot.sendMessage(chatId, 'You are already in a session. Type /cancel to stop it first.');
-  const activityId = normalizeText(id);
+  let activityId = normalizeText(id);
   if(!activityId) return bot.sendMessage(chatId, 'Usage: /edit <id> (get the id from /list)');
+
+  if(dbEnabled() && !isUuidLike(activityId)){
+    try{
+      const resolved = await resolveDbIdFromPrefix(activityId);
+      if(!resolved) return bot.sendMessage(chatId, 'Not found: ' + activityId);
+      activityId = resolved;
+    }catch(e){
+      return bot.sendMessage(chatId, String(e && e.message ? e.message : e));
+    }
+  }
 
   try{
     let existing = null;
