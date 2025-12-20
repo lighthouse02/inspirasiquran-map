@@ -325,6 +325,7 @@ function buildRecentListText(rows, page){
     const countText = count ? ` (${count})` : '';
 
     lines.push(`${idx + 1}. ${dateText} — ${title}${countText}${location ? ' — ' + location : ''}${idShort ? ' — id:' + idShort : ''}`);
+    if(idx !== rows.length - 1) lines.push('');
   });
 
   return lines.join('\n');
@@ -1000,6 +1001,9 @@ bot.on('message', async (msg)=>{
         }
         // fallback: store text only but warn user
         s.data.location = typed;
+        // Clear coords so we don't keep stale lat/lng when the new text couldn't be resolved.
+        s.data.lat = null;
+        s.data.lng = null;
         if(isEditMenuMode(s)){
           s.step = 'edit_menu';
           return promptForStep(chatId, s);
