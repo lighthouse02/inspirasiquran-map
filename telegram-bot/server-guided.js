@@ -395,6 +395,10 @@ const sessions = {};
 function startSession(chatId, userId, mode){ sessions[chatId] = { userId, mode: mode || 'create', step:'title', data:{} }; }
 function endSession(chatId){ delete sessions[chatId]; }
 
+function isEditMenuMode(s){
+  return Boolean(s && s.mode === 'edit' && s.editMode === 'menu');
+}
+
 function normalizeText(s){
   return String(s || '').trim();
 }
@@ -470,6 +474,10 @@ async function sendPreview(chatId, s){
 
 async function handleSkip(chatId, s){
   if(!s) return;
+  if(isEditMenuMode(s)){
+    s.step = 'edit_menu';
+    return promptForStep(chatId, s);
+  }
   if(s.step === 'date'){
     s.data.date = safeDateISO('');
     s.step = 'count';
@@ -530,6 +538,34 @@ function stepPrev(step){
 
 async function promptForStep(chatId, s){
   const mode = s.mode || 'create';
+  if(s.step === 'edit_menu'){
+    const title = s.data.title || '';
+    const dateText = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
+    const countText = (s.data.count == null) ? '' : String(s.data.count);
+    const locationText = s.data.location || '';
+    const hasAttachment = Boolean(s.data.attachment);
+    const noteText = s.data.note || '';
+
+    const summary =
+      `Editing activity:\n` +
+      `• Title: ${title || '(empty)'}\n` +
+      `• Date: ${dateText || '(empty)'}\n` +
+      `• Count: ${countText || '(empty)'}\n` +
+      `• Location: ${locationText || '(empty)'}\n` +
+      `• Attachment: ${hasAttachment ? 'set' : 'none'}\n` +
+      `• Note: ${noteText ? '(set)' : '(empty)'}\n\n` +
+      `Choose what to edit:`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Date', callback_data: '_edit_field_date' }, { text: 'Count', callback_data: '_edit_field_count' }],
+        [{ text: 'Location', callback_data: '_edit_field_location' }, { text: 'Attachment', callback_data: '_edit_field_attachment' }, { text: 'Note', callback_data: '_edit_field_note' }],
+        [{ text: 'Preview / Confirm', callback_data: '_edit_preview' }],
+        [{ text: 'Edit all (guided)', callback_data: '_edit_all' }, { text: 'Cancel', callback_data: '_edit_cancel' }]
+      ]
+    };
+    return bot.sendMessage(chatId, summary, { reply_markup: keyboard });
+  }
   if(s.step === 'title'){
     const cur = mode === 'edit' ? (s.data.title || '') : '';
     const msg = mode === 'edit'
@@ -619,7 +655,8 @@ async function beginEditFlow(msg, id){
     } else if(existing.attachment){
       s.data.attachment = existing.attachment;
     }
-    s.step = 'title';
+    s.editMode = 'menu';
+    s.step = 'edit_menu';
     return promptForStep(chatId, s);
   }catch(e){
     console.error('edit flow begin failed', e);
@@ -646,6 +683,11 @@ bot.onText(/\/back(?:@\w+)?/i, (msg)=>{
   const chatId = msg.chat.id;
   const s = sessions[chatId];
   if(!s) return;
+  if(isEditMenuMode(s) && s.step !== 'edit_menu'){
+    s.step = 'edit_menu';
+    promptForStep(chatId, s).catch(()=>{});
+    return;
+  }
   const prev = stepPrev(s.step);
   if(!prev) return bot.sendMessage(chatId, 'Already at the first step.');
   s.step = prev;
@@ -721,6 +763,10 @@ bot.on('message', async (msg)=>{
       } else {
         s.data.title = msg.text || msg.caption || s.data.title || 'Untitled';
       }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
+      }
       s.step = 'date';
       return promptForStep(chatId, s);
     }
@@ -728,6 +774,10 @@ bot.on('message', async (msg)=>{
       const raw = (msg.text||'').trim();
       if(isSkipText(raw)){
         if(s.mode !== 'edit') s.data.date = safeDateISO('');
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
         s.step = 'count';
         return promptForStep(chatId, s);
       }
@@ -735,6 +785,10 @@ bot.on('message', async (msg)=>{
       // treat it as "now" (current time) so the flow can continue.
       if(!raw){
         s.data.date = safeDateISO('');
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
         s.step = 'count';
         return promptForStep(chatId, s);
       }
@@ -744,6 +798,10 @@ bot.on('message', async (msg)=>{
       } else {
         s.data.date = safeDateISO(raw);
         s.data.dateRaw = raw; // preserve original when parsing is uncertain
+      }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
       }
       s.step = 'count';
       return promptForStep(chatId, s);
@@ -755,6 +813,10 @@ bot.on('message', async (msg)=>{
       } else {
         s.data.count = parseCountInput(msg.text);
       }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
+      }
       s.step='location';
       return promptForStep(chatId, s);
     }
@@ -762,26 +824,76 @@ bot.on('message', async (msg)=>{
       if(isSkipText(msg.text)){
         // keep existing when editing; otherwise blank
         if(s.mode !== 'edit') s.data.location = '';
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
         s.step = 'attachment';
         return promptForStep(chatId, s);
       }
-      if(msg.location){ s.data.lat = msg.location.latitude; s.data.lng = msg.location.longitude; s.data.location = 'Shared location'; s.step='attachment'; return bot.sendMessage(chatId, 'Location set from your shared location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } }); }
+      if(msg.location){
+        s.data.lat = msg.location.latitude; s.data.lng = msg.location.longitude; s.data.location = 'Shared location';
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
+        s.step='attachment';
+        return bot.sendMessage(chatId, 'Location set from your shared location. Attach a photo/doc or type /skip', { reply_markup:{ remove_keyboard:true } });
+      }
       if(msg.text && msg.text!=='Send my location' && msg.text!=='Type location'){
         const typed = msg.text.trim(); // try to geocode
         const geo = await geocodeLocation(typed);
-        if(geo){ s.data.lat = geo.lat; s.data.lng = geo.lng; s.data.location = geo.display_name; s.step='attachment'; return bot.sendMessage(chatId, `Location resolved: ${geo.display_name} (${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)})\nAttach photo/doc or type /skip`); }
+        if(geo){
+          s.data.lat = geo.lat; s.data.lng = geo.lng; s.data.location = geo.display_name;
+          if(isEditMenuMode(s)){
+            s.step = 'edit_menu';
+            return promptForStep(chatId, s);
+          }
+          s.step='attachment';
+          return bot.sendMessage(chatId, `Location resolved: ${geo.display_name} (${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)})\nAttach photo/doc or type /skip`);
+        }
         // fallback: store text only but warn user
-        s.data.location = typed; s.step='attachment'; return bot.sendMessage(chatId, 'Location saved as text (could not geocode). Example formats: "Kuala Lumpur, Malaysia" or "Bukit Bintang, Kuala Lumpur". You can send a Telegram location instead to set coords, or continue and attach photo/doc. Type /skip to continue.');
+        s.data.location = typed;
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
+        s.step='attachment';
+        return bot.sendMessage(chatId, 'Location saved as text (could not geocode). Example formats: "Kuala Lumpur, Malaysia" or "Bukit Bintang, Kuala Lumpur". You can send a Telegram location instead to set coords, or continue and attach photo/doc. Type /skip to continue.');
       }
       return bot.sendMessage(chatId, 'Tap Send my location or type location name');
     }
     if(s.step==='attachment'){
       // If user sends text like "skip" or "/skip@bot" treat it as skip.
-      if(msg.photo && msg.photo.length){ const fileId = msg.photo[msg.photo.length-1].file_id; const filename = path.join(UPLOADS_DIR, fileId + '.jpg'); try{ await downloadFile(fileId, filename); s.data.attachment={type:'photo',path:filename,fileId}; }catch(e){ s.data.attachment={type:'photo',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Photo saved. Add an optional note (or type /skip). Tip: use full-resolution images for best results.'); }
-      if(msg.document){ const fileId=msg.document.file_id; const filename = path.join(UPLOADS_DIR, msg.document.file_name||fileId); try{ await downloadFile(fileId, filename); s.data.attachment={type:'doc',path:filename,fileId}; }catch(e){ s.data.attachment={type:'doc',fileId}; } s.step='note'; return bot.sendMessage(chatId, 'Document saved. Any note? (or /skip)'); }
+      if(msg.photo && msg.photo.length){
+        const fileId = msg.photo[msg.photo.length-1].file_id;
+        const filename = path.join(UPLOADS_DIR, fileId + '.jpg');
+        try{ await downloadFile(fileId, filename); s.data.attachment={type:'photo',path:filename,fileId}; }catch(e){ s.data.attachment={type:'photo',fileId}; }
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
+        s.step='note';
+        return bot.sendMessage(chatId, 'Photo saved. Add an optional note (or type /skip). Tip: use full-resolution images for best results.');
+      }
+      if(msg.document){
+        const fileId=msg.document.file_id;
+        const filename = path.join(UPLOADS_DIR, msg.document.file_name||fileId);
+        try{ await downloadFile(fileId, filename); s.data.attachment={type:'doc',path:filename,fileId}; }catch(e){ s.data.attachment={type:'doc',fileId}; }
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
+        s.step='note';
+        return bot.sendMessage(chatId, 'Document saved. Any note? (or /skip)');
+      }
       if(msg.text && isSkipText(msg.text)){
         // keep existing when editing; otherwise clear
         if(s.mode !== 'edit') s.data.attachment = null;
+        if(isEditMenuMode(s)){
+          s.step = 'edit_menu';
+          return promptForStep(chatId, s);
+        }
         s.step='note';
         return bot.sendMessage(chatId, 'Skipping attachment. Any note? (or /skip)', { reply_markup:{ force_reply:true } });
       }
@@ -797,6 +909,10 @@ bot.on('message', async (msg)=>{
         s.data.note = msg.caption;
       } else {
         s.data.note = s.data.note || '';
+      }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
       }
       return sendPreview(chatId, s);
     }
@@ -851,6 +967,68 @@ bot.on('callback_query', async (cq) => {
       await bot.answerCallbackQuery(cq.id, { text: 'Session expired.' });
       return;
     }
+
+    // Edit menu actions (only when a session exists)
+    if(data === '_edit_cancel'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Canceled' });
+      endSession(chatId);
+      await bot.sendMessage(chatId, 'Edit canceled.');
+      return;
+    }
+    if(data === '_edit_all'){
+      session.editMode = 'guided';
+      session.step = 'title';
+      await bot.answerCallbackQuery(cq.id, { text: 'Edit all' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_preview'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Preview' });
+      await sendPreview(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_title'){
+      session.editMode = 'menu';
+      session.step = 'title';
+      await bot.answerCallbackQuery(cq.id, { text: 'Title' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_date'){
+      session.editMode = 'menu';
+      session.step = 'date';
+      await bot.answerCallbackQuery(cq.id, { text: 'Date' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_count'){
+      session.editMode = 'menu';
+      session.step = 'count';
+      await bot.answerCallbackQuery(cq.id, { text: 'Count' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_location'){
+      session.editMode = 'menu';
+      session.step = 'location';
+      await bot.answerCallbackQuery(cq.id, { text: 'Location' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_attachment'){
+      session.editMode = 'menu';
+      session.step = 'attachment';
+      await bot.answerCallbackQuery(cq.id, { text: 'Attachment' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_note'){
+      session.editMode = 'menu';
+      session.step = 'note';
+      await bot.answerCallbackQuery(cq.id, { text: 'Note' });
+      await promptForStep(chatId, session);
+      return;
+    }
     if(data === '_confirm'){
       const item = session.pending;
       if(!item){ await bot.answerCallbackQuery(cq.id, { text: 'Nothing to confirm.' }); return; }
@@ -881,9 +1059,9 @@ bot.on('callback_query', async (cq) => {
 
       // Optional: announce to a channel/chat
       if((session.mode || 'create') === 'edit'){
-        await announceToChannelIfConfigured(item, 'Activity updated');
+        await announceToChannelIfConfigured(item, '#AU');
       } else {
-        await announceToChannelIfConfigured(item, 'New activity');
+        await announceToChannelIfConfigured(item, '#NA');
       }
 
       const savedDateText = item.date ? formatDateUTC(item.date) : (item.dateRaw || item.date || '');
