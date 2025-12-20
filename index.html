@@ -1045,7 +1045,16 @@
     /* make the collapsed toggle stick to the right edge and visible */
     .map-activity-control .map-activity-toggle { position: absolute; right: 10px; top: 8px; }
     /* ensure page timeline sits below the floating feed when present */
-    #pageMapTimeline { margin-top: 56px; }
+    #pageMapTimeline {
+      margin-top: 56px;
+      max-width: none !important;
+      width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      padding-left: 8px !important;
+      padding-right: 8px !important;
+      box-sizing: border-box !important;
+    }
     /* When control is moved into the page flow it will naturally push the map down; default map height adjusted via JS when moving control. */
   }
 </style>

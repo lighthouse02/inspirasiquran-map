@@ -738,6 +738,51 @@ bot.on('message', async (msg)=>{
   const chatId = msg.chat.id;
   if(msg.edit_date) return;
 
+  // Some users type "\" (backslash) instead of "/" (slash) for commands.
+  // Support it as a convenience in private chat.
+  if(typeof msg.text === 'string' && msg.text.startsWith('\\')){
+    const normalized = '/' + msg.text.slice(1);
+    const m = normalized.match(/^\/([a-zA-Z0-9_]+)(?:\s+([\s\S]+))?$/);
+    const cmd = m ? String(m[1] || '').toLowerCase() : '';
+    const arg = m ? (m[2] || '') : '';
+
+    try{
+      if(cmd === 'start' || cmd === 'menu') return void sendMainMenu(chatId);
+      if(cmd === 'help') return void bot.sendMessage(chatId, getHelpText());
+      if(cmd === 'new') return void beginGuidedFlow({ chat: { id: chatId }, from: { id: msg.from.id } });
+      if(cmd === 'list') return void sendRecentList(chatId);
+      if(cmd === 'cancel'){
+        pendingMenuActionByChatId[chatId] = null;
+        endSession(chatId);
+        return void bot.sendMessage(chatId, 'Canceled.');
+      }
+      if(cmd === 'skip'){
+        const s = sessions[chatId];
+        if(!s) return void bot.sendMessage(chatId, 'No active session.');
+        return void handleSkip(chatId, s);
+      }
+      if(cmd === 'back'){
+        const s = sessions[chatId];
+        if(!s) return void bot.sendMessage(chatId, 'No active session.');
+        if(isEditMenuMode(s) && s.step !== 'edit_menu'){
+          s.step = 'edit_menu';
+          return void promptForStep(chatId, s);
+        }
+        const prev = stepPrev(s.step);
+        if(!prev) return void bot.sendMessage(chatId, 'Already at the first step.');
+        s.step = prev;
+        return void promptForStep(chatId, s);
+      }
+      if(cmd === 'edit') return void beginEditFlow({ chat: { id: chatId }, from: { id: msg.from.id } }, arg);
+      if(cmd === 'delete') return void handleDeleteById(chatId, msg.from.id, arg);
+
+      return void bot.sendMessage(chatId, 'Tip: Telegram commands use "/" (slash), e.g. /menu.');
+    }catch(e){
+      console.error('Backslash command failed', e);
+      return void bot.sendMessage(chatId, 'Command failed: ' + (e.message || e));
+    }
+  }
+
   // Handle menu-driven prompts even when not in a guided session.
   const pendingMenuAction = pendingMenuActionByChatId[chatId];
   if(!sessions[chatId] && pendingMenuAction){
@@ -761,7 +806,7 @@ bot.on('message', async (msg)=>{
   if(!s) return;
   try{
     // Commands are handled by onText handlers; avoid double-processing in the step machine.
-    if(msg.text && /^\/(start|help|new|cancel|skip|back|edit|delete|add|list)\b/i.test(msg.text)) return;
+    if(msg.text && /^\/(start|help|menu|new|cancel|skip|back|edit|delete|add|list)\b/i.test(msg.text)) return;
 
     if(s.step==='title'){
       if(isSkipText(msg.text) && s.mode === 'edit'){
