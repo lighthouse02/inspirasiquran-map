@@ -33,6 +33,8 @@ if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 // Used for menu-driven edit/delete prompts (when user taps buttons instead of typing commands).
 const pendingMenuActionByChatId = Object.create(null);
 
+const RECENT_LIST_PAGE_SIZE = 6;
+
 // Register commands so Telegram shows them in the bot UI menu.
 try{
   bot.setMyCommands([
@@ -269,18 +271,102 @@ During /new you can share location via Telegram or type a location (e.g. Kuala L
 }
 
 async function sendRecentList(chatId){
+  return sendRecentListPage(chatId, 0);
+}
+
+async function fetchRecentListPage(pageIndex){
+  const page = Math.max(0, Number(pageIndex || 0));
+  const pageSize = RECENT_LIST_PAGE_SIZE;
+  const offset = page * pageSize;
+
+  if(dbEnabled()){
+    const pool = getDbPool();
+    if(!pool) throw new Error('DB is not configured');
+
+    const q = `SELECT id, title, COALESCE(activity_date, created_at) AS date, count, location
+               FROM activities
+               ORDER BY COALESCE(activity_date, created_at) DESC
+               LIMIT $1 OFFSET $2`;
+    const res = await pool.query(q, [pageSize + 1, offset]);
+    const rowsAll = res.rows || [];
+    const hasNext = rowsAll.length > pageSize;
+    const rows = rowsAll.slice(0, pageSize);
+    return { rows, page, hasNext };
+  }
+
+  const arr = loadActivities();
+  // ensure newest first
+  const sorted = (arr || []).slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
+  const rowsAll = sorted.slice(offset, offset + pageSize + 1);
+  const hasNext = rowsAll.length > pageSize;
+  const rows = rowsAll.slice(0, pageSize);
+  return { rows, page, hasNext };
+}
+
+function buildRecentListText(rows, page){
+  const p = Number(page || 0);
+  if(!rows || rows.length === 0){
+    return p === 0 ? 'No activities yet.' : 'No more activities.';
+  }
+  const lines = [];
+  lines.push(`Recent activities (page ${p + 1})`);
+  lines.push('Tap Edit/Delete buttons below.');
+  lines.push('');
+
+  rows.forEach((r, idx)=>{
+    const id = String((r && r.id) ? r.id : (r && r.id === 0 ? r.id : '')).trim();
+    const idShort = id ? id.slice(0, 8) : '';
+    const title = r && r.title ? String(r.title) : 'Activity';
+    const dateVal = r && r.date ? r.date : (r && r.created_at ? r.created_at : '');
+    let dateText = '';
+    try{ dateText = dateVal ? new Date(dateVal).toISOString() : ''; }catch(e){ dateText = String(dateVal || ''); }
+    const location = r && r.location ? String(r.location) : '';
+    const count = (r && r.count != null && String(r.count).trim() !== '') ? String(r.count) : '';
+    const countText = count ? ` (${count})` : '';
+
+    lines.push(`${idx + 1}. ${dateText} — ${title}${countText}${location ? ' — ' + location : ''}${idShort ? ' — id:' + idShort : ''}`);
+  });
+
+  return lines.join('\n');
+}
+
+function buildRecentListKeyboard(rows, page, hasNext){
+  const p = Math.max(0, Number(page || 0));
+  const keyboard = [];
+
+  // per-item actions
+  if(Array.isArray(rows)){
+    rows.forEach((r, idx)=>{
+      const id = String(r && r.id ? r.id : '').trim();
+      if(!id) return;
+      keyboard.push([
+        { text: `✏️ Edit ${idx + 1}`, callback_data: `_list_edit:${id}` },
+        { text: `🗑️ Delete ${idx + 1}`, callback_data: `_list_delete:${id}` }
+      ]);
+    });
+  }
+
+  // pagination
+  const nav = [];
+  if(p > 0) nav.push({ text: '⬅️ Prev', callback_data: `_list_page:${p - 1}` });
+  if(hasNext) nav.push({ text: 'Next ➡️', callback_data: `_list_page:${p + 1}` });
+  nav.push({ text: '🔄 Refresh', callback_data: `_list_refresh:${p}` });
+  nav.push({ text: '✖️ Close', callback_data: `_list_close` });
+  keyboard.push(nav);
+
+  return { inline_keyboard: keyboard };
+}
+
+async function sendRecentListPage(chatId, pageIndex, opts){
   try{
-    if(dbEnabled()){
-      const rows = await listActivitiesFromDb(10);
-      const lines = rows.map(r=>{
-        const fullId = String(r.id || '');
-        return `${fullId} — ${new Date(r.date).toISOString()} — ${r.title} ${r.count?('('+r.count+')'):''} ${r.location||''}`;
-      });
-      return bot.sendMessage(chatId, lines.join('\n') || 'No activities');
+    const { rows, page, hasNext } = await fetchRecentListPage(pageIndex);
+    const text = buildRecentListText(rows, page);
+    const reply_markup = buildRecentListKeyboard(rows, page, hasNext);
+
+    if(opts && opts.editMessageId){
+      return bot.editMessageText(text, { chat_id: chatId, message_id: opts.editMessageId, reply_markup });
     }
-    const arr = loadActivities();
-    const lines = arr.slice(-10).reverse().map(i=>`${String(i.id||'').slice(0,8)} — ${i.date} — ${i.title} ${i.count?('('+i.count+')'):''} ${i.location||''}`);
-    return bot.sendMessage(chatId, lines.join('\n') || 'No activities');
+    return bot.sendMessage(chatId, text, { reply_markup });
   }catch(e){
     console.error('List failed', e);
     return bot.sendMessage(chatId, 'List failed: ' + (e.message || e));
@@ -734,7 +820,10 @@ bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match)=>{
   })();
 });
 
-bot.onText(/\/list/, (msg)=>{ sendRecentList(msg.chat.id).catch(()=>{}); });
+bot.onText(/\/list(?:\s+(\d+))?\b/i, (msg, match)=>{
+  const page = match && match[1] ? (Math.max(1, Number(match[1])) - 1) : 0;
+  sendRecentListPage(msg.chat.id, page).catch(()=>{});
+});
 
 bot.on('message', async (msg)=>{
   const chatId = msg.chat.id;
@@ -752,7 +841,11 @@ bot.on('message', async (msg)=>{
       if(cmd === 'start' || cmd === 'menu') return void sendMainMenu(chatId);
       if(cmd === 'help') return void bot.sendMessage(chatId, getHelpText());
       if(cmd === 'new') return void beginGuidedFlow({ chat: { id: chatId }, from: { id: msg.from.id } });
-      if(cmd === 'list') return void sendRecentList(chatId);
+      if(cmd === 'list'){
+        const n = String(arg || '').trim();
+        const page = /^\d+$/.test(n) ? (Math.max(1, Number(n)) - 1) : 0;
+        return void sendRecentListPage(chatId, page);
+      }
       if(cmd === 'cancel'){
         pendingMenuActionByChatId[chatId] = null;
         endSession(chatId);
@@ -979,6 +1072,7 @@ bot.on('callback_query', async (cq) => {
   try{
     const data = cq.data;
     const chatId = cq.message.chat.id;
+    const messageId = cq.message && cq.message.message_id;
 
     // Menu actions should work even when there is no active session.
     if(data === '_menu_new'){
@@ -987,7 +1081,7 @@ bot.on('callback_query', async (cq) => {
     }
     if(data === '_menu_list'){
       await bot.answerCallbackQuery(cq.id, { text: 'Listing…' });
-      await sendRecentList(chatId);
+      await sendRecentListPage(chatId, 0);
       return;
     }
     if(data === '_menu_help'){
@@ -1013,6 +1107,37 @@ bot.on('callback_query', async (cq) => {
       endSession(chatId);
       await bot.sendMessage(chatId, 'Canceled.');
       return;
+    }
+
+    // Recent list actions should work without an active session.
+    if(typeof data === 'string' && data.startsWith('_list_page:')){
+      const n = Number(String(data.split(':')[1] || '').trim());
+      await bot.answerCallbackQuery(cq.id, { text: 'Loading…' });
+      await sendRecentListPage(chatId, Number.isFinite(n) ? n : 0, { editMessageId: messageId });
+      return;
+    }
+    if(typeof data === 'string' && data.startsWith('_list_refresh:')){
+      const n = Number(String(data.split(':')[1] || '').trim());
+      await bot.answerCallbackQuery(cq.id, { text: 'Refreshing…' });
+      await sendRecentListPage(chatId, Number.isFinite(n) ? n : 0, { editMessageId: messageId });
+      return;
+    }
+    if(data === '_list_close'){
+      await bot.answerCallbackQuery(cq.id, { text: 'Closed' });
+      try{ await bot.deleteMessage(chatId, String(messageId)); }catch(e){
+        try{ await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: messageId }); }catch(_){ }
+      }
+      return;
+    }
+    if(typeof data === 'string' && data.startsWith('_list_edit:')){
+      const id = String(data.slice('_list_edit:'.length) || '').trim();
+      await bot.answerCallbackQuery(cq.id, { text: 'Edit' });
+      return beginEditFlow({ chat: { id: chatId }, from: { id: cq.from.id } }, id);
+    }
+    if(typeof data === 'string' && data.startsWith('_list_delete:')){
+      const id = String(data.slice('_list_delete:'.length) || '').trim();
+      await bot.answerCallbackQuery(cq.id, { text: 'Deleting…' });
+      return handleDeleteById(chatId, cq.from.id, id);
     }
 
     const session = sessions[chatId];
