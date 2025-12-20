@@ -238,6 +238,13 @@
 
       const markersById = {};
 
+      function simplifyPlaceName(location){
+        const s = String(location || '').trim();
+        if(!s) return '';
+        const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+        return parts.length ? parts[0] : s;
+      }
+
       function toTs(d){ return (d instanceof Date) ? d.getTime() : (isNaN(Date.parse(d)) ? null : Date.parse(d)); }
 
       async function load(){
@@ -617,6 +624,7 @@
         for(const it of items){
           const dateStr = it.date.toLocaleString();
           const countStr = it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '';
+          const locationShort = simplifyPlaceName(it.location || '');
           // Render Sumud-style activity card
           const card = document.createElement('div'); card.className = 'activity-card';
           // stack top row and attachment vertically so the attachment spans full card width
@@ -627,7 +635,7 @@
           card._ts = it.date.getTime();
           let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
           // keep the small dot thumb (do not replace it with an inline image)
-          const meta = `<div class="meta"><div class="date">${dateStr}</div><div class="location">${it.location||''}</div></div>`;
+          const meta = `<div class="meta"><div class="date">${dateStr}</div><div class="location">${locationShort}</div></div>`;
           const body = `<div class="body">${meta}<div class="title">${it.title}</div><div class="desc">${it.note||''}</div></div>`;
           const cta = `<div class="cta"><div class="activity-count">${it.count?it.count:''}</div></div>`;
               const topRow = `<div style="display:flex;gap:12px;align-items:flex-start;width:100%">${thumb}${body}${cta}</div>`;
@@ -872,7 +880,7 @@
                 <label style="min-width:78px;color:#cfc6b8;font-weight:700;">Timeline</label>
                 <div style="flex:1; position:relative; height:44px;">
                   <!-- range sits inside a relative container so we can absolutely place incident buttons above it -->
-                  <input id="pageMapTimelineRange" type="range" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);width:100%; height:14px; background:transparent; -webkit-appearance:none; z-index:3;">
+                  <input id="pageMapTimelineRange" type="range" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);width:100%; height:14px; background:transparent; -webkit-appearance:none; appearance:none; z-index:3;">
                     <style>
                       /* style the native range thumb to be subtle and transparent so the custom track shows through */
                       #pageMapTimelineRange::-webkit-slider-runnable-track{ height:14px; background:transparent; }

@@ -55,7 +55,7 @@ function escapeHtml(s){
     .replace(/>/g, '&gt;');
 }
 
-const BRAND_SIGNATURE_TEXT = 'Telegram @inspirasiquranlive';
+const BRAND_SIGNATURE_TEXT = '@inspirasiquranlive';
 
 function buildAnnouncementText(item, action){
   const title = item && item.title ? String(item.title) : 'Activity';
@@ -68,13 +68,15 @@ function buildAnnouncementText(item, action){
 
   const lines = [];
   lines.push(`<b>${escapeHtml(action || 'Activity')}</b>`);
-  lines.push(`<b>Title:</b> ${escapeHtml(title)}`);
-  if(dateText) lines.push(`<b>Date:</b> ${escapeHtml(dateText)}`);
-  if(countText) lines.push(`<b>Count:</b> ${escapeHtml(countText)}`);
-  if(locationText) lines.push(`<b>Location:</b> ${escapeHtml(locationText)}`);
-  if(coordsText) lines.push(`<b>Coords:</b> ${escapeHtml(coordsText)}`);
-  if(noteText) lines.push(`<b>Note:</b> ${escapeHtml(noteText)}`);
-  if(idText) lines.push(`<b>ID:</b> ${escapeHtml(idText)}`);
+  lines.push(`<b>Title</b>: ${escapeHtml(title)}`);
+  if(dateText) lines.push(`<b>Date</b>: ${escapeHtml(dateText)}`);
+  if(countText) lines.push(`<b>Count</b>: ${escapeHtml(countText)}`);
+  if(locationText) lines.push(`<b>Location</b>: ${escapeHtml(locationText)}`);
+  if(coordsText) lines.push(`<b>Coords</b>: ${escapeHtml(coordsText)}`);
+  if(noteText) lines.push(`<b>Note</b>: ${escapeHtml(noteText)}`);
+  if(idText) lines.push(`<b>ID</b>: ${escapeHtml(idText)}`);
+  lines.push('');
+  lines.push('');
   lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
   return lines.join('\n');
 }
@@ -461,7 +463,7 @@ async function sendPreview(chatId, s){
   if(item.attachment && item.attachment.type) preview += `\n\n_Attachment:_ ${escapeMarkdown(item.attachment.type)}`;
 
   // Brand footer (monospace)
-  preview += `\n\n\`${BRAND_SIGNATURE_TEXT}\``;
+  preview += `\n\n\n\`${BRAND_SIGNATURE_TEXT}\``;
 
   const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
   try{
