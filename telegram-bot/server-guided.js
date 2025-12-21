@@ -3,6 +3,16 @@ const path = require('path');
 const https = require('https');
 const TelegramBot = require('node-telegram-bot-api');
 
+let S3Client = null;
+let PutObjectCommand = null;
+try{
+  ({ S3Client, PutObjectCommand } = require('@aws-sdk/client-s3'));
+}catch(e){
+  // optional dependency; only needed if using R2/S3 for public attachments
+  S3Client = null;
+  PutObjectCommand = null;
+}
+
 let Pool = null;
 try{
   ({ Pool } = require('pg'));
@@ -58,6 +68,108 @@ function escapeHtml(s){
 }
 
 const BRAND_SIGNATURE_TEXT = '@inspirasiquranlive';
+
+// --- Optional: Cloudflare R2 / S3-compatible object storage for public attachment URLs ---
+// Required env vars:
+// - R2_ENDPOINT (e.g. https://<accountid>.r2.cloudflarestorage.com)
+// - R2_BUCKET
+// - R2_ACCESS_KEY_ID
+// - R2_SECRET_ACCESS_KEY
+// - R2_PUBLIC_BASE (e.g. https://<your-public-domain> or https://<account>.r2.dev/<bucket>)
+// Optional env var:
+// - R2_KEY_PREFIX (e.g. images/)
+const R2_ENDPOINT = (process.env.R2_ENDPOINT || '').trim();
+const R2_BUCKET = (process.env.R2_BUCKET || '').trim();
+const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE || '').trim();
+const R2_KEY_PREFIX = (process.env.R2_KEY_PREFIX || '').trim();
+const R2_ACCESS_KEY_ID = (process.env.R2_ACCESS_KEY_ID || '').trim();
+const R2_SECRET_ACCESS_KEY = (process.env.R2_SECRET_ACCESS_KEY || '').trim();
+
+let _s3 = null;
+function r2Enabled(){
+  return Boolean(S3Client && PutObjectCommand && R2_ENDPOINT && R2_BUCKET && R2_PUBLIC_BASE && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY);
+}
+
+function getS3Client(){
+  if(!r2Enabled()) return null;
+  if(_s3) return _s3;
+  _s3 = new S3Client({
+    region: 'auto',
+    endpoint: R2_ENDPOINT,
+    credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
+    forcePathStyle: false
+  });
+  return _s3;
+}
+
+function contentTypeForAttachment(att){
+  const t = String(att && att.type ? att.type : '').toLowerCase();
+  const p = String(att && att.path ? att.path : '');
+  const ext = (p ? path.extname(p).toLowerCase() : '');
+
+  if(t === 'photo'){
+    if(ext === '.png') return 'image/png';
+    if(ext === '.webp') return 'image/webp';
+    return 'image/jpeg';
+  }
+  if(t === 'doc' || t === 'document'){
+    if(ext === '.pdf') return 'application/pdf';
+    return 'application/octet-stream';
+  }
+  // default
+  if(ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if(ext === '.png') return 'image/png';
+  if(ext === '.webp') return 'image/webp';
+  if(ext === '.pdf') return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+function safeR2KeyFromFilename(filename){
+  const base = path.basename(String(filename || '')).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const now = new Date();
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+
+  let prefix = String(R2_KEY_PREFIX || '').trim();
+  if(prefix && !prefix.endsWith('/')) prefix += '/';
+  // default folder if no prefix is configured
+  if(!prefix) prefix = 'uploads/';
+
+  return `${prefix}${yyyy}/${mm}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${base}`;
+}
+
+async function uploadFileToR2(filePath, key, contentType){
+  const s3 = getS3Client();
+  if(!s3) throw new Error('R2 is not configured');
+
+  const cmd = new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    Body: fs.createReadStream(filePath),
+    ContentType: contentType || 'application/octet-stream'
+  });
+  await s3.send(cmd);
+  return `${R2_PUBLIC_BASE.replace(/\/$/, '')}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+}
+
+async function ensurePublicAttachmentUrl(item){
+  try{
+    if(!item || !item.attachment) return;
+    const att = item.attachment;
+    // already public
+    if(att.webPath && /^https?:\/\//i.test(String(att.webPath))) return;
+    if(!att.path || !fs.existsSync(att.path)) return;
+    if(!r2Enabled()) return;
+
+    const key = safeR2KeyFromFilename(att.path);
+    const url = await uploadFileToR2(att.path, key, contentTypeForAttachment(att));
+    att.webPath = url;
+    item.attachment_url = url;
+    item.attachment_type = att.type || 'photo';
+  }catch(e){
+    console.warn('R2 upload failed; attachment will not be public:', e && (e.message || e));
+  }
+}
 
 function buildAnnouncementText(item, action){
   const title = item && item.title ? String(item.title) : 'Activity';
@@ -1216,6 +1328,9 @@ bot.on('callback_query', async (cq) => {
       if(!item){ await bot.answerCallbackQuery(cq.id, { text: 'Nothing to confirm.' }); return; }
       // ensure attachment has webPath for client rendering
       try{ if(item.attachment && item.attachment.path && !item.attachment.webPath){ item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path)); } }catch(e){}
+
+      // If configured, upload attachments to R2 so the map site can load them via a public URL.
+      await ensurePublicAttachmentUrl(item);
 
       // Save to Neon DB if configured; otherwise save to local activities.json
       if(dbEnabled()){
