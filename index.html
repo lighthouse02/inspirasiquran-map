@@ -424,9 +424,17 @@
         return t === 'distribution' || /\bdistribution\b/.test(t);
       }
 
+      // expose helpers for other scripts (KPI/header)
+      try{
+        if(typeof window.toTs !== 'function') window.toTs = toTs;
+        if(typeof window.isDistributionType !== 'function') window.isDistributionType = isDistributionType;
+      }catch(e){}
+
       function formatNumber(n){
         try{ return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n); }catch(e){ return String(n); }
       }
+
+      try{ if(typeof window.formatNumber !== 'function') window.formatNumber = formatNumber; }catch(e){}
 
       function parseCountryFromLocationLoose(location){
         var s = String(location || '').trim();
@@ -1281,7 +1289,21 @@
         map.addLayer(searchLayer);
 
         // Leaflet.Control.Search (from leaflet-control-search)
-        var searchControl = new L.Control.Search({
+        var makeSearch = null;
+        try{
+          if(L && L.Control && typeof L.Control.Search === 'function'){
+            makeSearch = function(opts){ return new L.Control.Search(opts); };
+          } else if(L && L.control && typeof L.control.search === 'function'){
+            makeSearch = function(opts){ return L.control.search(opts); };
+          }
+        }catch(e){ makeSearch = null; }
+
+        if(!makeSearch){
+          console.warn('Search plugin not available (leaflet-control-search did not load)');
+          return;
+        }
+
+        var searchControl = makeSearch({
           layer: searchLayer,
           propertyName: 'title',
           marker: false,
