@@ -11,7 +11,40 @@ if(!TOKEN){
 // Optional: comma-separated list of allowed Telegram user IDs (for security)
 const ALLOWED = (process.env.ALLOWED_TELEGRAM_IDS || '').split(',').map(s=>s.trim()).filter(Boolean).map(Number);
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+// Polling mode (long polling via getUpdates). Telegram allows only ONE active getUpdates consumer per bot.
+// If you deploy with >1 instance (replicas/autoscaling) or run locally while deployed, you'll hit:
+// 409 Conflict: terminated by other getUpdates request
+const bot = new TelegramBot(TOKEN, { polling: false });
+
+let _pollingStarting = false;
+async function startPollingSafely(){
+  if(_pollingStarting) return;
+  _pollingStarting = true;
+  try{
+    await bot.deleteWebHook({ drop_pending_updates: false });
+  }catch(e){
+    console.warn('Could not delete webhook (continuing):', e && (e.message || e));
+  }
+  try{
+    await bot.startPolling();
+    console.log('Telegram bot polling started');
+  }catch(e){
+    console.error('Failed to start polling:', e && (e.message || e));
+  }finally{
+    _pollingStarting = false;
+  }
+}
+
+bot.on('polling_error', async (err) => {
+  const msg = (err && err.message) ? String(err.message) : String(err || '');
+  if(/\b409\b/.test(msg) && /getUpdates/i.test(msg)){
+    console.error('Polling conflict (409). Another bot instance is polling. Ensure only ONE instance is running. Will pause and retry.');
+    try{ await bot.stopPolling(); }catch(_e){ /* ignore */ }
+    setTimeout(() => { startPollingSafely(); }, 120_000);
+  }else{
+    console.error('polling_error:', err);
+  }
+});
 const ACTIVITIES_PATH = path.resolve(__dirname, '..', 'activities.json');
 
 function loadActivities(){
@@ -80,6 +113,9 @@ bot.onText(/\/add(\s+[\s\S]+)/i, (msg, match) => {
     bot.sendMessage(msg.chat.id, 'Failed to add activity: ' + (e.message || e));
   }
 });
+
+// Start polling after handlers are registered.
+startPollingSafely();
 
 bot.onText(/\/list/, (msg) => {
   const arr = loadActivities();

@@ -35,7 +35,46 @@ const ALLOWED = (process.env.ALLOWED_TELEGRAM_IDS || '').split(',').map(s=>s.tri
 // Optional: announce saved activities to a Telegram channel/chat.
 // Set TELEGRAM_CHANNEL_ID (e.g. -1001234567890 or @yourchannelusername)
 const ANNOUNCE_CHAT_ID = (process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_ANNOUNCE_CHAT_ID || '').trim();
-const bot = new TelegramBot(TOKEN, { polling: true });
+
+// Polling mode (long polling via getUpdates). NOTE: Telegram allows only ONE active getUpdates consumer per bot.
+// If you deploy with >1 instance (replicas/autoscaling) or run locally while deployed, you will hit:
+// 409 Conflict: terminated by other getUpdates request
+const bot = new TelegramBot(TOKEN, { polling: false });
+
+let _pollingStarting = false;
+async function startPollingSafely(){
+  if(_pollingStarting) return;
+  _pollingStarting = true;
+  try{
+    // Ensure webhook isn't set (webhook + polling is incompatible).
+    await bot.deleteWebHook({ drop_pending_updates: false });
+  }catch(e){
+    console.warn('Could not delete webhook (continuing):', e && (e.message || e));
+  }
+  try{
+    await bot.startPolling();
+    console.log('Telegram bot polling started');
+  }catch(e){
+    console.error('Failed to start polling:', e && (e.message || e));
+  }finally{
+    _pollingStarting = false;
+  }
+}
+
+// Start polling after handlers are registered.
+startPollingSafely();
+
+bot.on('polling_error', async (err) => {
+  const msg = (err && err.message) ? String(err.message) : String(err || '');
+  if(/\b409\b/.test(msg) && /getUpdates/i.test(msg)){
+    console.error('Polling conflict (409). Another bot instance is polling. Ensure only ONE instance is running. Will pause and retry.');
+    try{ await bot.stopPolling(); }catch(_e){ /* ignore */ }
+    // Back off so we don't spam logs and Telegram; retry in 2 minutes.
+    setTimeout(() => { startPollingSafely(); }, 120_000);
+  }else{
+    console.error('polling_error:', err);
+  }
+});
 const ACTIVITIES_PATH = path.resolve(__dirname, '..', 'activities.json');
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -65,6 +104,60 @@ function escapeHtml(s){
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function simplifyPlaceName(s){
+  const t = String(s || '').trim();
+  if(!t) return '';
+  return t.split(',')[0].trim();
+}
+
+function normalizeActivityType(raw){
+  const t = String(raw || '').trim().toLowerCase();
+  if(!t) return '';
+  if(t === 'transit' || t === 'journey' || t === 'movement') return 'transit';
+  if(t === 'arrival' || t === 'arrive' || t === 'tiba') return 'arrival';
+  if(t === 'distribution' || t === 'agihan' || t === 'distribute') return 'distribution';
+  if(t === 'class' || t === 'lesson' || t === 'huffaz') return 'class';
+  if(t === 'delivery' || t === 'completion' || t === 'complete' || t === 'selesai') return 'completion';
+  if(t === 'update' || t === 'status') return 'update';
+  return t.replace(/\s+/g, '_');
+}
+
+function activityTypeStyle(type){
+  const t = normalizeActivityType(type);
+  const map = {
+    transit: { emoji: '✈️', headline: 'Dalam Perjalanan Amanah', phase: 'Journey' },
+    arrival: { emoji: '🛬', headline: 'Telah Tiba Dengan Selamat', phase: 'Journey' },
+    distribution: { emoji: '📖', headline: 'Agihan Amanah Al-Quran', phase: 'Impact' },
+    class: { emoji: '👥', headline: 'Sesi Bersama Huffaz', phase: 'Continuity' },
+    completion: { emoji: '🚚', headline: 'Amanah Disempurnakan', phase: 'Closure' },
+    update: { emoji: '📍', headline: 'Kemas Kini Amanah', phase: 'Update' }
+  };
+  return map[t] || { emoji: '📍', headline: 'Kemas Kini Amanah', phase: 'Update' };
+}
+
+function splitMissionAndNote(note){
+  const raw = String(note || '').trim();
+  if(!raw) return { mission: '', note: '' };
+  const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if(lines.length === 0) return { mission: '', note: '' };
+
+  // If note begins with “Misi …” treat first 1–2 lines as mission.
+  if(/^misi\b/i.test(lines[0]) || /^mission\b/i.test(lines[0])){
+    const mission = lines.slice(0, Math.min(2, lines.length)).join(' ');
+    const rest = lines.slice(Math.min(2, lines.length)).join('\n');
+    return { mission, note: rest };
+  }
+
+  // If the first line is exactly “Misi” and the next line is the country/name.
+  if(lines[0].toLowerCase() === 'misi' && lines[1]){
+    const mission = `Misi ${lines[1]}`;
+    const rest = lines.slice(2).join('\n');
+    return { mission, note: rest };
+  }
+
+  return { mission: '', note: raw };
 }
 
 const BRAND_SIGNATURE_TEXT = '@inspirasiquranlive';
@@ -175,20 +268,43 @@ function buildAnnouncementText(item, action){
   const title = item && item.title ? String(item.title) : 'Activity';
   const dateText = item && item.date ? formatDateUTC(item.date) : (item && item.dateRaw ? String(item.dateRaw) : '');
   const countText = (item && item.count != null && String(item.count).trim() !== '') ? String(item.count) : '';
-  const locationText = item && item.location ? String(item.location) : '';
-  const coordsText = (item && typeof item.lat === 'number' && typeof item.lng === 'number') ? `${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}` : '';
+  const locationText = item && item.location ? simplifyPlaceName(item.location) : '';
   const noteText = item && item.note ? String(item.note) : '';
-  const idText = (item && item.id != null && String(item.id).trim() !== '') ? String(item.id) : '';
+  const type = normalizeActivityType(item && item.activity_type ? item.activity_type : (item && item.type ? item.type : ''));
+  const style = activityTypeStyle(type);
+  const missionSplit = splitMissionAndNote(noteText);
 
   const lines = [];
-  lines.push(`<b>${escapeHtml(action || 'Activity')}</b>`);
-  lines.push(`<b>Title</b>: ${escapeHtml(title)}`);
-  if(dateText) lines.push(`<b>Date</b>: ${escapeHtml(dateText)}`);
-  if(countText) lines.push(`<b>Count</b>: ${escapeHtml(countText)}`);
-  if(locationText) lines.push(`<b>Location</b>: ${escapeHtml(locationText)}`);
-  if(coordsText) lines.push(`<b>Coords</b>: ${escapeHtml(coordsText)}`);
-  if(noteText) lines.push(`<b>Note</b>: ${escapeHtml(noteText)}`);
-  if(idText) lines.push(`<b>ID</b>: ${escapeHtml(idText)}`);
+  lines.push(`<b>${escapeHtml(style.emoji + ' ' + style.headline)}</b>`);
+  if(type) lines.push(`${escapeHtml('🏷️ ' + style.phase + ' · ' + type)}`);
+  lines.push('');
+
+  if(locationText){
+    lines.push(`${escapeHtml(title)} kini berada di`);
+    lines.push(`${escapeHtml(locationText)}`);
+  }else{
+    lines.push(`${escapeHtml(title)}`);
+  }
+
+  lines.push('');
+  if(dateText) lines.push(`${escapeHtml('🗓 ' + dateText)}`);
+  if(missionSplit.mission) lines.push(`${escapeHtml('🕌 ' + missionSplit.mission)}`);
+  if(countText) lines.push(`${escapeHtml('📦 ' + countText)}`);
+
+  if(missionSplit.note){
+    lines.push('');
+    // Keep note formatting but still HTML-safe
+    const noteLines = String(missionSplit.note).split(/\r?\n/);
+    for(const nl of noteLines){
+      const trimmed = String(nl || '').trim();
+      if(trimmed) lines.push(escapeHtml(trimmed));
+    }
+  }
+
+  const hasAttachment = Boolean(getAttachmentSendTarget(item));
+  if(hasAttachment) lines.push(escapeHtml('📎 Lampiran disertakan'));
+
+  // Brand footer
   lines.push('');
   lines.push('');
   lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
@@ -301,7 +417,8 @@ async function getActivityFromDbById(id){
                     latitude AS lat,
                     longitude AS lng,
                     attachment_url,
-                    attachment_type
+                    attachment_type,
+                    raw
              FROM activities
              WHERE id = $1`;
   const r = await pool.query(q, [id]);
@@ -379,7 +496,7 @@ function isAllowed(userId){ if(ALLOWED.length===0) return true; return ALLOWED.i
 
 function getHelpText(){
   return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
-During /new you can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
+During /new you can also set an activity type (transit/arrival/distribution/class/completion) to make channel posts prettier. You can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
 }
 
 async function sendRecentList(chatId){
@@ -643,6 +760,7 @@ async function sendPreview(chatId, s){
   const item = {
     id: s.data.id || makeId(),
     title: s.data.title,
+    activity_type: s.data.activity_type,
     date: safeDateISO(s.data.date),
     count: s.data.count,
     location: s.data.location,
@@ -656,10 +774,28 @@ async function sendPreview(chatId, s){
   s.step = 'confirming';
 
   const displayDate = item.date ? formatDateUTC(item.date) : (item.dateRaw || '');
-  let preview = `*Preview activity*\n\n*Title:* ${escapeMarkdown(item.title)}\n*Date:* ${escapeMarkdown(displayDate)}\n*Count:* ${escapeMarkdown(String(item.count||''))}\n*Location:* ${escapeMarkdown(String(item.location||''))}`;
-  if(item.lat && item.lng) preview += `\n*Coords:* ${item.lat}, ${item.lng}`;
-  if(item.note) preview += `\n\n*Note:* ${escapeMarkdown(item.note)}`;
-  if(item.attachment && item.attachment.type) preview += `\n\n_Attachment:_ ${escapeMarkdown(item.attachment.type)}`;
+  const type = normalizeActivityType(item.activity_type);
+  const style = activityTypeStyle(type);
+  const place = simplifyPlaceName(item.location);
+  const missionSplit = splitMissionAndNote(item.note);
+
+  // Telegram v3 preview (Markdown)
+  let preview = `*${escapeMarkdown(style.emoji + ' ' + style.headline)}*`;
+  if(type) preview += `\n${escapeMarkdown('🏷️ ' + style.phase + ' · ' + type)}`;
+  preview += `\n\n`;
+  if(place){
+    preview += `${escapeMarkdown(String(item.title||''))} kini berada di\n${escapeMarkdown(place)}`;
+  }else{
+    preview += `${escapeMarkdown(String(item.title||''))}`;
+  }
+  preview += `\n\n`;
+  if(displayDate) preview += `${escapeMarkdown('🗓 ' + displayDate)}\n`;
+  if(missionSplit.mission) preview += `${escapeMarkdown('🕌 ' + missionSplit.mission)}\n`;
+  if(item.count != null && String(item.count).trim() !== '') preview += `${escapeMarkdown('📦 ' + String(item.count))}\n`;
+  if(missionSplit.note){
+    preview += `\n${escapeMarkdown(String(missionSplit.note))}`;
+  }
+  if(item.attachment && item.attachment.type) preview += `\n\n${escapeMarkdown('📎 Lampiran disertakan')}`;
 
   // Brand footer (monospace)
   preview += `\n\n\n\`${BRAND_SIGNATURE_TEXT}\``;
@@ -684,6 +820,11 @@ async function handleSkip(chatId, s){
   if(isEditMenuMode(s)){
     s.step = 'edit_menu';
     return promptForStep(chatId, s);
+  }
+  if(s.step === 'type'){
+    s.data.activity_type = s.data.activity_type || '';
+    s.step = 'date';
+    return bot.sendMessage(chatId, 'Date/time (examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025). Tip: type "now" for current time.', { reply_markup:{ force_reply:true } });
   }
   if(s.step === 'date'){
     s.data.date = safeDateISO('');
@@ -738,15 +879,27 @@ function stepPrev(step){
     attachment: 'location',
     location: 'count',
     count: 'date',
-    date: 'title'
+    date: 'type',
+    type: 'title'
   };
   return map[step] || '';
+}
+
+function activityTypeKeyboard(){
+  return {
+    inline_keyboard: [
+      [{ text: '✈️ Transit', callback_data: '_set_type:transit' }, { text: '🛬 Arrival', callback_data: '_set_type:arrival' }],
+      [{ text: '📖 Distribution', callback_data: '_set_type:distribution' }, { text: '👥 Class', callback_data: '_set_type:class' }],
+      [{ text: '🚚 Completion', callback_data: '_set_type:completion' }, { text: '📍 Update', callback_data: '_set_type:update' }]
+    ]
+  };
 }
 
 async function promptForStep(chatId, s){
   const mode = s.mode || 'create';
   if(s.step === 'edit_menu'){
     const title = s.data.title || '';
+    const typeText = s.data.activity_type || '';
     const dateText = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
     const countText = (s.data.count == null) ? '' : String(s.data.count);
     const locationText = s.data.location || '';
@@ -756,6 +909,7 @@ async function promptForStep(chatId, s){
     const summary =
       `Editing activity:\n` +
       `• Title: ${title || '(empty)'}\n` +
+      `• Type: ${typeText || '(empty)'}\n` +
       `• Date: ${dateText || '(empty)'}\n` +
       `• Count: ${countText || '(empty)'}\n` +
       `• Location: ${locationText || '(empty)'}\n` +
@@ -765,8 +919,9 @@ async function promptForStep(chatId, s){
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Date', callback_data: '_edit_field_date' }, { text: 'Count', callback_data: '_edit_field_count' }],
-        [{ text: 'Location', callback_data: '_edit_field_location' }, { text: 'Attachment', callback_data: '_edit_field_attachment' }, { text: 'Note', callback_data: '_edit_field_note' }],
+        [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Type', callback_data: '_edit_field_type' }, { text: 'Date', callback_data: '_edit_field_date' }],
+        [{ text: 'Count', callback_data: '_edit_field_count' }, { text: 'Location', callback_data: '_edit_field_location' }, { text: 'Attachment', callback_data: '_edit_field_attachment' }],
+        [{ text: 'Note', callback_data: '_edit_field_note' }],
         [{ text: 'Preview / Confirm', callback_data: '_edit_preview' }],
         [{ text: 'Edit all (guided)', callback_data: '_edit_all' }, { text: 'Cancel', callback_data: '_edit_cancel' }]
       ]
@@ -779,6 +934,13 @@ async function promptForStep(chatId, s){
       ? `Editing activity. Current title: ${cur ? '"' + cur + '"' : '(empty)'}\nSend new title (or /skip to keep).`
       : "Let's create a new activity. What is the title? (e.g. 'Quran distribution — Village X')";
     return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'type'){
+    const cur = s.data.activity_type || '';
+    const msg = (mode === 'edit')
+      ? `Current type: ${cur || '(empty)'}\nChoose a new type below, or type it manually, or /skip to keep.`
+      : 'Activity type (for prettier Telegram posts). Choose one:';
+    return bot.sendMessage(chatId, msg, { reply_markup: activityTypeKeyboard() });
   }
   if(s.step === 'date'){
     const cur = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
@@ -851,6 +1013,13 @@ async function beginEditFlow(msg, id){
     s.data.id = existing.id;
     s.data.title = existing.title || '';
     s.data.note = existing.note || existing.desc || '';
+    // Try to recover activity_type from raw JSON (if present)
+    try{
+      if(existing.raw){
+        const rawObj = (typeof existing.raw === 'string') ? JSON.parse(existing.raw) : existing.raw;
+        if(rawObj && rawObj.activity_type) s.data.activity_type = String(rawObj.activity_type);
+      }
+    }catch(e){ /* ignore */ }
     s.data.date = existing.date ? safeDateISO(existing.date) : (existing.activity_date ? safeDateISO(existing.activity_date) : safeDateISO(''));
     s.data.count = (existing.count == null) ? null : existing.count;
     s.data.location = existing.location || '';
@@ -1021,6 +1190,20 @@ bot.on('message', async (msg)=>{
         // keep current
       } else {
         s.data.title = msg.text || msg.caption || s.data.title || 'Untitled';
+      }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
+      }
+      s.step = 'type';
+      return promptForStep(chatId, s);
+    }
+    if(s.step==='type'){
+      const raw = (msg.text||'').trim();
+      if(isSkipText(raw)){
+        if(s.mode !== 'edit') s.data.activity_type = '';
+      }else{
+        s.data.activity_type = normalizeActivityType(raw);
       }
       if(isEditMenuMode(s)){
         s.step = 'edit_menu';
@@ -1262,6 +1445,19 @@ bot.on('callback_query', async (cq) => {
       return;
     }
 
+    // Type picker (works in create/edit flows)
+    if(typeof data === 'string' && data.startsWith('_set_type:')){
+      const t = normalizeActivityType(String(data.slice('_set_type:'.length) || '').trim());
+      session.data.activity_type = t;
+      await bot.answerCallbackQuery(cq.id, { text: t ? ('Type: ' + t) : 'Type cleared' });
+      // If we're currently asking for type, move forward.
+      if(session.step === 'type'){
+        session.step = 'date';
+      }
+      await promptForStep(chatId, session);
+      return;
+    }
+
     // Edit menu actions (only when a session exists)
     if(data === '_edit_cancel'){
       await bot.answerCallbackQuery(cq.id, { text: 'Canceled' });
@@ -1285,6 +1481,13 @@ bot.on('callback_query', async (cq) => {
       session.editMode = 'menu';
       session.step = 'title';
       await bot.answerCallbackQuery(cq.id, { text: 'Title' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_type'){
+      session.editMode = 'menu';
+      session.step = 'type';
+      await bot.answerCallbackQuery(cq.id, { text: 'Type' });
       await promptForStep(chatId, session);
       return;
     }
