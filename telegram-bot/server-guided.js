@@ -270,11 +270,8 @@ function buildTelegramV3Markdown(item){
   const att = (item && item.attachment) ? item.attachment : null;
   const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
 
-  const DIV = '━━━━━━━━━━━━━━━━━━━━';
   const lines = [];
-  lines.push(DIV);
   lines.push(`${style.emoji} MISI · ${typeUpper}`);
-  lines.push(DIV);
   lines.push('');
 
   if(safeTitle) lines.push(`👤 *${safeTitle}*`);
@@ -313,11 +310,8 @@ function buildTelegramV3Html(item){
   const att = (item && item.attachment) ? item.attachment : null;
   const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
 
-  const DIV = '━━━━━━━━━━━━━━━━━━━━';
   const lines = [];
-  lines.push(DIV);
   lines.push(`${escapeHtml(style.emoji)} <b>MISI · ${typeUpper}</b>`);
-  lines.push(DIV);
   lines.push('');
 
   if(safeTitle) lines.push(`👤 <b>${safeTitle}</b>`);
