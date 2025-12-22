@@ -16,7 +16,6 @@
   <link rel="icon" type="image/png" href="/quran-map/assets/icon%20quran.png" />
   <link rel="apple-touch-icon" href="/quran-map/assets/icon%20quran.png" />
     
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.css" />
     
         <script>
             L_NO_TOUCH = false;
@@ -26,7 +25,6 @@
     <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
     <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
@@ -369,6 +367,8 @@
       let mapControlCreated = false;
 
       const markersById = {};
+      let lastItems = [];
+      let mapRef = null;
 
       function simplifyPlaceName(location){
         const s = String(location || '').trim();
@@ -506,6 +506,7 @@
 
       function highlightTableBucket(key){
         if(!key) return;
+        if(!mapRef) return;
         var parts = String(key).split('||');
         var mission = (parts[0] === '—') ? '' : parts[0];
         var location = (parts[1] === '—') ? '' : parts[1];
@@ -522,11 +523,11 @@
         if(!markers.length) return;
         var first = markers[0];
         try{
-          var prevBounds = null; try{ prevBounds = map.getMaxBounds ? map.getMaxBounds() : null; }catch(e){}
-          try{ map.setMaxBounds && map.setMaxBounds(null); }catch(e){}
-          map.setView(first.getLatLng(), Math.max(6, map.getZoom()));
+          var prevBounds = null; try{ prevBounds = mapRef.getMaxBounds ? mapRef.getMaxBounds() : null; }catch(e){}
+          try{ mapRef.setMaxBounds && mapRef.setMaxBounds(null); }catch(e){}
+          mapRef.setView(first.getLatLng(), Math.max(6, mapRef.getZoom()));
           first.openPopup && first.openPopup();
-          setTimeout(function(){ try{ if(prevBounds) map.setMaxBounds(prevBounds); }catch(e){} }, 3000);
+          setTimeout(function(){ try{ if(prevBounds) mapRef.setMaxBounds(prevBounds); }catch(e){} }, 3000);
         }catch(e){ }
         // temporarily emphasize markers
         markers.forEach(function(m){
@@ -562,6 +563,7 @@
       }
 
       whenMapReady(function(map){
+        mapRef = map;
         // Create an in-map activity control (timeline + feed)
         if(!mapControlCreated){
           var MapActivityControl = L.Control.extend({
@@ -695,7 +697,7 @@
         var movementFullLine = L.polyline([], { color: '#ff6b6b', weight: 0.5, opacity: 0.95, pane: 'overlayPane' }).addTo(map);
         var movementProgressLine = L.polyline([], { color: '#ff6b6b', weight: 0.5, opacity: 0.95, pane: 'overlayPane' }).addTo(map);
         const markerLayer = L.layerGroup().addTo(map);
-        var lastItems = [];
+        lastItems = [];
 
         function clearFeedAndMarkers(){
           feedUL.innerHTML = '';
@@ -1265,59 +1267,7 @@
   @keyframes ripple { from{transform:scale(.6); opacity:.9} to{transform:scale(1.5); opacity:0} }
 </style>
     
-<script>
-  (function(){
-    var data = [{'label': 'Chad', 'lat': 15.454166, 'lng': 18.732207}, {'label': 'Djibouti', 'lat': 11.825138, 'lng': 42.590275}, {'label': 'Niger', 'lat': 17.607789, 'lng': 8.081666}, {'label': 'Cameroon', 'lat': 12.087083, 'lng': 15.0148322}, {'label': 'Ethiopia', 'lat': 8.5263486, 'lng': 39.2583293}, {'label': 'Tanzania', 'lat': -6.1629685, 'lng': 39.1865491}, {'label': 'Tanzania', 'lat': -6.9275886, 'lng': 39.1335549}, {'label': 'Tanzania', 'lat': -6.135729500000001, 'lng': 39.3621196}, {'label': 'Sarajevo, Bosnia', 'lat': 43.8598677, 'lng': 18.4128265}, {'label': 'Ouagadougou, Burkina Faso', 'lat': 12.3714277, 'lng': -1.5196603}];
-    function whenMapReady(cb){
-      var tries = 0;
-      (function tick(){
-        var m = window['map_650a101fa46c8081aa4ee9eed624a32a'];
-        if(m && typeof m.addControl === 'function'){ cb(m); return; }
-        if(tries++ < 400) return setTimeout(tick, 25);
-        console.warn('Search: map not ready');
-      })();
-    }
 
-    whenMapReady(function(map){
-      // Build a simple layer of invisible markers for search hits
-      var searchLayer = L.layerGroup();
-      try{
-        data.forEach(function(p){
-          if(!p || p.lat == null || p.lng == null) return;
-          L.marker([p.lat, p.lng], { title: p.label || '' , opacity: 0 }).addTo(searchLayer);
-        });
-        map.addLayer(searchLayer);
-
-        // Leaflet.Control.Search (from leaflet-control-search)
-        var makeSearch = null;
-        try{
-          if(L && L.Control && typeof L.Control.Search === 'function'){
-            makeSearch = function(opts){ return new L.Control.Search(opts); };
-          } else if(L && L.control && typeof L.control.search === 'function'){
-            makeSearch = function(opts){ return L.control.search(opts); };
-          }
-        }catch(e){ makeSearch = null; }
-
-        if(!makeSearch){
-          console.warn('Search plugin not available (leaflet-control-search did not load)');
-          return;
-        }
-
-        var searchControl = makeSearch({
-          layer: searchLayer,
-          propertyName: 'title',
-          marker: false,
-          moveToLocation: function(latlng, title, map){
-            map.setView(latlng, Math.max(6, map.getZoom()));
-          }
-        });
-        map.addControl(searchControl);
-      }catch(e){
-        console.warn('Search control init failed', e);
-      }
-    });
-  })();
-</script>
     
 <style>
   /* Dark popup shell (remove Leaflet's white) */
