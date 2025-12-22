@@ -17,7 +17,6 @@
   <link rel="apple-touch-icon" href="/quran-map/assets/icon%20quran.png" />
     
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.css" />
-<script src="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.js"></script>
     
         <script>
             L_NO_TOUCH = false;
@@ -27,6 +26,7 @@
     <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
     <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-control-search@2.9.8/dist/leaflet-search.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
@@ -180,6 +180,9 @@
         white-space:nowrap;
       }
 
+    </style>
+
+    <script>
       function updateKpi(items){
         try{
           var BASE = 31230;
@@ -279,6 +282,10 @@
           });
           return months;
         }
+
+    </script>
+
+    <style>
       .activity-sub, .activity-sub .activity-date, .activity-sub .activity-count { color:#cfc6b8; font-size:13px; }
       .activity-right { min-width:120px; display:flex; justify-content:flex-end; }
       .activity-location { display:inline-flex; align-items:center; gap:8px; color:#f4f2ee; font-weight:600; }
