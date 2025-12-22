@@ -200,6 +200,43 @@ function buildTelegramV3Markdown(item){
   return lines.join('\n');
 }
 
+function buildTelegramV3Html(item){
+  const safeTitle = escapeHtml(item && item.title ? String(item.title) : '');
+  const type = normalizeActivityType(item && item.activity_type ? item.activity_type : '');
+  const style = activityTypeStyle(type);
+  const typeUpper = escapeHtml(activityTypeLabelUpper(type) || 'UPDATE');
+  const place = escapeHtml(simplifyPlaceName(item && item.location ? String(item.location) : ''));
+  const when = escapeHtml(formatDateUTCWithDot(item && item.date ? item.date : (item && item.dateRaw ? item.dateRaw : '')));
+  const missionSplit = splitMissionAndNote(item && item.note ? String(item.note) : '');
+  const missionName = escapeHtml(extractMissionName(missionSplit.mission));
+  const att = (item && item.attachment) ? item.attachment : null;
+  const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
+
+  const DIV = '━━━━━━━━━━━━━━━━━━━━';
+  const lines = [];
+  lines.push(DIV);
+  lines.push(`${escapeHtml(style.emoji)} <b>MISI · ${typeUpper}</b>`);
+  lines.push(DIV);
+  lines.push('');
+
+  if(safeTitle) lines.push(`👤 <b>${safeTitle}</b>`);
+  if(place) lines.push(`📍 <i>${place}</i>`);
+  if(when) lines.push(`🕒 ${when}`);
+
+  if(missionName){
+    lines.push('');
+    lines.push(`📝 <b>Misi:</b> ${missionName}`);
+  }
+  if(attL){
+    lines.push(`${escapeHtml(attL.emoji)} <i>${escapeHtml(attL.text)}</i>`);
+  }
+
+  lines.push('');
+  lines.push('');
+  lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
+  return lines.join('\n');
+}
+
 function splitMissionAndNote(note){
   const raw = String(note || '').trim();
   if(!raw) return { mission: '', note: '' };
@@ -328,8 +365,8 @@ async function ensurePublicAttachmentUrl(item){
 }
 
 function buildAnnouncementText(item, action){
-  // Telegram v3 announcement (Markdown)
-  return buildTelegramV3Markdown(item);
+  // Telegram v3 announcement (HTML)
+  return buildTelegramV3Html(item);
 }
 
 function getAttachmentSendTarget(item){
@@ -359,17 +396,17 @@ async function announceToChannelIfConfigured(item, action){
       // Telegram caption is limited; keep it safe.
       const caption = text.length > 950 ? (text.slice(0, 947) + '…') : text;
       if(kind === 'doc' || kind === 'document'){
-        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'Markdown' });
+        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
       } else {
-        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'Markdown' });
+        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
       }
       if(text.length > caption.length){
-        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'Markdown', disable_web_page_preview: true });
+        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
       }
       return;
     }
 
-    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
   }catch(e){
     console.warn('Channel announce failed (check TELEGRAM_CHANNEL_ID and bot permissions):', e && (e.response && e.response.body ? e.response.body : e.message || e));
   }
@@ -868,20 +905,20 @@ async function sendPreview(chatId, s){
   s.pending = item;
   s.step = 'confirming';
 
-  const preview = buildTelegramV3Markdown(item);
+  const preview = buildTelegramV3Html(item);
 
   const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
   try{
     if(item.attachment && item.attachment.type === 'photo' && item.attachment.path && fs.existsSync(item.attachment.path)){
       item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path));
-      await bot.sendPhoto(chatId, item.attachment.path, { caption: preview, parse_mode: 'Markdown', reply_markup: keyboard });
+      await bot.sendPhoto(chatId, item.attachment.path, { caption: preview, parse_mode: 'HTML', reply_markup: keyboard });
     } else {
       if(item.attachment && item.attachment.path){ item.attachment.webPath = path.join('telegram-bot','uploads', path.basename(item.attachment.path)); }
-      await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
+      await bot.sendMessage(chatId, preview, { parse_mode: 'HTML', reply_markup: keyboard });
     }
   }catch(e){
     console.warn('Preview send failed, falling back to text', e);
-    await bot.sendMessage(chatId, preview, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await bot.sendMessage(chatId, preview, { parse_mode: 'HTML', reply_markup: keyboard });
   }
 }
 
