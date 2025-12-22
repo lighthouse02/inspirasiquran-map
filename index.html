@@ -182,16 +182,26 @@
       @media (max-width:720px){ .activity-item { flex-direction:column; align-items:flex-start; } .activity-right{ width:100%; justify-content:flex-start; margin-top:6px } }
       /* Sumud-like card feed styles */
       .activity-cards{ display:flex; flex-direction:column; gap:12px; }
-      .activity-card{ display:flex; gap:12px; align-items:flex-start; background:linear-gradient(180deg, rgba(25,27,30,0.6), rgba(18,20,23,0.6)); border:1px solid rgba(190,170,141,0.06); padding:12px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.45); }
+      .activity-card{ display:flex; gap:12px; align-items:flex-start; background:linear-gradient(180deg, rgba(25,27,30,0.6), rgba(18,20,23,0.6)); border:1px solid rgba(190,170,141,0.06); padding:12px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.45); transition: background .12s ease, transform .08s ease, border-color .12s ease; }
+      .activity-card:hover{ background: rgba(190,170,141,.03); transform: translateY(-1px); border-color: rgba(190,170,141,0.10); }
+      .activity-card.activity-card--stack{ flex-direction:column; align-items:stretch; }
       /* replace large thumbnail with a compact red dot */
       .activity-card .thumb{ width:28px; height:28px; border-radius:50%; background:transparent; display:flex; align-items:center; justify-content:center; color:#fff; font-size:0; flex-shrink:0 }
       .activity-dot{ width:12px; height:12px; border-radius:50%; background:#ff6b6b; box-shadow:0 0 10px rgba(255,107,107,0.35); display:inline-block }
+      .activity-card-top{ display:flex; gap:12px; align-items:flex-start; width:100%; }
       .activity-card .body{ flex:1; min-width:0 }
-      .activity-card .meta{ display:flex; gap:12px; align-items:center; color:#cfc6b8; font-size:13px; margin-bottom:6px }
+      .activity-card .meta{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px }
+      .activity-chip{ display:inline-flex; align-items:center; max-width:100%; padding:4px 8px; border-radius:999px; background:rgba(190,170,141,.06); border:1px solid rgba(190,170,141,.10); color:#cfc6b8; font-size:12px; line-height:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+      .activity-chip--type{ font-weight:800; color:#f4f2ee; background:rgba(255,107,107,.10); border-color: rgba(255,107,107,.20); letter-spacing:.02em }
       .activity-card .title{ color:#f4f2ee; font-weight:800; font-size:15px; margin-bottom:6px }
-      .activity-card .desc{ color:#d7d0c0; font-size:13px; opacity:.95 }
+      .activity-card .desc{ color:#d7d0c0; font-size:13px; opacity:.95; line-height:1.35 }
+      .activity-card .desc:empty{ display:none }
       .activity-card .cta{ margin-left:12px; display:flex; flex-direction:column; gap:8px }
       .activity-count{ font-weight:800; color:#111315; background:#BEAA8D; padding:8px 10px; border-radius:999px; box-shadow:0 8px 18px rgba(0,0,0,.35) }
+      .activity-count:empty{ display:none }
+      .activity-attachment{ margin-top:10px; width:100%; }
+      .activity-attachment-inner{ width:100%; position:relative; padding-top:56.25%; overflow:hidden; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,.25) }
+      .activity-attachment-img{ position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; object-position:center center; display:block; }
     </style>
 
     <script>
@@ -252,6 +262,31 @@
         if(!s) return '';
         const parts = s.split(',').map(p => p.trim()).filter(Boolean);
         return parts.length ? parts[0] : s;
+      }
+
+      function escapeHtml(value){
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function escapeAttr(value){
+        return escapeHtml(value).replace(/\s+/g, ' ').trim();
+      }
+
+      function formatCardDate(d){
+        try{
+          const dt = (d instanceof Date) ? d : new Date(d);
+          if(isNaN(dt.getTime())) return '';
+          const date = dt.toLocaleDateString(undefined, { day:'2-digit', month:'short', year:'numeric' });
+          const time = dt.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+          return date + ' · ' + time;
+        }catch(e){
+          return '';
+        }
       }
 
       function toTs(d){ return (d instanceof Date) ? d.getTime() : (isNaN(Date.parse(d)) ? null : Date.parse(d)); }
@@ -427,6 +462,7 @@
           title: it.title || it.note || 'Activity',
           date: (it.date ? new Date(it.date) : (it.created_at ? new Date(it.created_at) : new Date())),
           count: it.count || it.mushaf || null,
+          activity_type: it.activity_type || it.type || '',
           location: it.location || '',
           lat: (typeof it.lat==='number')?it.lat:(it.latitude||null),
           lng: (typeof it.lng==='number')?it.lng:(it.longitude||null),
@@ -631,23 +667,30 @@
 
         // append items (oldest first so newest appears last by addActivity which inserts at top)
         for(const it of items){
-          const dateStr = it.date.toLocaleString();
+          const dateStr = formatCardDate(it.date) || it.date.toLocaleString();
           const countStr = it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '';
           const locationShort = simplifyPlaceName(it.location || '');
           // Render Sumud-style activity card
           const card = document.createElement('div'); card.className = 'activity-card';
           // stack top row and attachment vertically so the attachment spans full card width
-          card.style.flexDirection = 'column';
-          card.style.alignItems = 'stretch';
+          card.classList.add('activity-card--stack');
           card.setAttribute('data-activity-id', it.id);
           card.setAttribute('data-ts', it.date.getTime());
           card._ts = it.date.getTime();
           let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
           // keep the small dot thumb (do not replace it with an inline image)
-          const meta = `<div class="meta"><div class="date">${dateStr}</div><div class="location">${locationShort}</div></div>`;
-          const body = `<div class="body">${meta}<div class="title">${it.title}</div><div class="desc">${it.note||''}</div></div>`;
-          const cta = `<div class="cta"><div class="activity-count">${it.count?it.count:''}</div></div>`;
-              const topRow = `<div style="display:flex;gap:12px;align-items:flex-start;width:100%">${thumb}${body}${cta}</div>`;
+          const typeLabel = (it.activity_type ? String(it.activity_type) : '').trim();
+          const metaParts = [
+            `<span class="activity-chip">${escapeHtml(dateStr)}</span>`,
+            (locationShort ? `<span class="activity-chip">${escapeHtml(locationShort)}</span>` : ''),
+            (typeLabel ? `<span class="activity-chip activity-chip--type">${escapeHtml(typeLabel.toUpperCase())}</span>` : '')
+          ].filter(Boolean).join('');
+          const meta = `<div class="meta">${metaParts}</div>`;
+          const titleHtml = `<div class="title">${escapeHtml(it.title)}</div>`;
+          const descHtml = `<div class="desc">${escapeHtml(it.note||'')}</div>`;
+          const body = `<div class="body">${meta}${titleHtml}${descHtml}</div>`;
+          const cta = `<div class="cta"><div class="activity-count">${escapeHtml(countStr)}</div></div>`;
+              const topRow = `<div class="activity-card-top">${thumb}${body}${cta}</div>`;
               // attachment row (full width) if present
               let attachmentHtml = '';
               try{
@@ -665,11 +708,15 @@
                       var parts = raw.split('/');
                       var bn = parts.pop() || parts.pop();
                       if(!bn) bn = raw;
+                      // keep filename-only to avoid path traversal
+                      bn = String(bn).replace(/[^a-zA-Z0-9._-]/g, '_');
                       src = './telegram-bot/uploads/' + bn;
                     }
                   }catch(e){ src = ''; }
                   // render attachment as full-width 16:9 cover (will crop to fill)
-                  attachmentHtml = `<div class="attachment-row" style="margin-top:10px;width:100%"><div class="attachment-inner" style="width:100%;position:relative;padding-top:56.25%;overflow:hidden;border-radius:8px;border:1px solid rgba(255,255,255,0.04)"><img class="attachment-img" src="${src}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block;" alt="attachment"/></div></div>`;
+                  if(src){
+                    attachmentHtml = `<div class="activity-attachment"><div class="activity-attachment-inner"><img class="activity-attachment-img" loading="lazy" src="${escapeAttr(src)}" alt="attachment"/></div></div>`;
+                  }
                 }
               }catch(e){ }
               card.innerHTML = topRow + attachmentHtml;
