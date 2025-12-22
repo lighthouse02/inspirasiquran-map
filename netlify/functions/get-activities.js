@@ -36,6 +36,14 @@ function parseCountNumberLoose(value){
   return Math.round(n);
 }
 
+function parseCountryFromLocationLoose(location){
+  const s = String(location || '').trim();
+  if(!s) return '';
+  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+  if(parts.length >= 2) return parts[parts.length - 1];
+  return '';
+}
+
 exports.handler = async function(event) {
   try {
     if (!pool) {
@@ -52,6 +60,7 @@ exports.handler = async function(event) {
     if(cols.has('mission')) extra.push('mission');
     if(cols.has('activity_type')) extra.push('activity_type');
     if(cols.has('count_number')) extra.push('count_number');
+    if(cols.has('country')) extra.push('country');
 
     const q = `SELECT id, title, note, created_at, activity_date, count, ${extra.join(', ')}${extra.length ? ',' : ''} location, latitude AS lat, longitude AS lng, attachment_url, raw
                FROM activities
@@ -68,6 +77,7 @@ exports.handler = async function(event) {
       count_number: r.count_number,
       mission: r.mission,
       activity_type: r.activity_type,
+      country: r.country,
       location: r.location,
       lat: r.lat,
       lng: r.lng,
@@ -89,6 +99,9 @@ exports.handler = async function(event) {
       const mission = (r.mission != null && String(r.mission).trim())
         ? String(r.mission)
         : (rawObj && rawObj.mission ? String(rawObj.mission) : '');
+      const country = (r.country != null && String(r.country).trim())
+        ? String(r.country)
+        : (rawObj && rawObj.country ? String(rawObj.country) : parseCountryFromLocationLoose(r.location));
       const count_number = (r.count_number != null)
         ? parseCountNumberLoose(r.count_number)
         : ((rawObj && rawObj.count_number != null)
@@ -102,6 +115,7 @@ exports.handler = async function(event) {
         activity_type,
         highlights: highlights || '',
         mission: mission || '',
+        country: country || '',
         count_number: count_number == null ? null : count_number
       };
     });

@@ -315,6 +315,14 @@
         try{ return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n); }catch(e){ return String(n); }
       }
 
+      function parseCountryFromLocationLoose(location){
+        var s = String(location || '').trim();
+        if(!s) return '';
+        var parts = s.split(',').map(function(p){ return p.trim(); }).filter(Boolean);
+        if(parts.length >= 2) return parts[parts.length - 1];
+        return '';
+      }
+
       function renderDistributionTable(items){
         var tbody = document.getElementById('impactTableBody') || (document.querySelector('#impactTable tbody'));
         if(!tbody) return;
@@ -322,7 +330,7 @@
         var now = Date.now();
         var cutoff = now - (30 * 24 * 60 * 60 * 1000);
 
-        var buckets = {}; // key -> { mission, location, total, delta30 }
+        var buckets = {}; // key -> { mission, country, location, total, delta30 }
         for(var i=0;i<items.length;i++){
           var it = items[i];
           if(!isDistributionType(it.activity_type)) continue;
@@ -331,10 +339,12 @@
 
           var mission = String(it.mission || '').trim();
           var place = String(it.location || '').trim();
+          var country = String(it.country || '').trim() || parseCountryFromLocationLoose(place);
 
           var key = (mission || '—') + '||' + (place || '—');
-          if(!buckets[key]) buckets[key] = { mission: (mission || '—'), location: (place || '—'), total: 0, delta30: 0 };
+          if(!buckets[key]) buckets[key] = { mission: (mission || '—'), country: (country || '—'), location: (place || '—'), total: 0, delta30: 0 };
           buckets[key].total += c;
+          if(!buckets[key].country || buckets[key].country === '—') buckets[key].country = (country || '—');
           var ts = (it.date instanceof Date) ? it.date.getTime() : Date.parse(it.date);
           if(isFinite(ts) && ts >= cutoff) buckets[key].delta30 += c;
         }
@@ -346,7 +356,7 @@
         });
 
         if(!rows.length){
-          tbody.innerHTML = '<tr><td class="placeholder" colspan="4">—</td></tr>';
+          tbody.innerHTML = '<tr><td class="placeholder" colspan="5">—</td></tr>';
           return;
         }
 
@@ -354,6 +364,7 @@
           var delta = r.delta30 > 0 ? ('<span class="delta">+' + escapeHtml(formatNumber(r.delta30)) + '</span>') : '';
           return '<tr>'
             + '<td>' + escapeHtml(r.mission) + '</td>'
+            + '<td>' + escapeHtml(r.country || '—') + '</td>'
             + '<td>' + escapeHtml(r.location) + '</td>'
             + '<td class="num">' + escapeHtml(formatNumber(r.total)) + '</td>'
             + '<td class="num">' + delta + '</td>'
@@ -1265,6 +1276,7 @@
       <thead>
         <tr>
           <th>Mission</th>
+          <th>Country</th>
           <th>Location</th>
           <th class="num">Total</th>
           <th class="num">Last 30d</th>

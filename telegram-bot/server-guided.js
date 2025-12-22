@@ -584,6 +584,7 @@ async function insertActivityToDb(item){
   const hasCountNumberCol = cols.has('count_number');
   const hasMissionCol = cols.has('mission');
   const hasActivityTypeCol = cols.has('activity_type');
+  const hasCountryCol = cols.has('country');
 
   const rawItem = ensureDerivedActivityFields(item);
 
@@ -597,6 +598,7 @@ async function insertActivityToDb(item){
   if(hasCountNumberCol){ columns.push('count_number'); values.push(rawItem.count_number == null ? null : Number(rawItem.count_number)); }
   if(hasMissionCol){ columns.push('mission'); values.push(rawItem.mission || null); }
   if(hasActivityTypeCol){ columns.push('activity_type'); values.push(rawItem.activity_type || null); }
+  if(hasCountryCol){ columns.push('country'); values.push(rawItem.country || null); }
 
   columns.push('location', 'latitude', 'longitude', 'attachment_url', 'attachment_type', 'raw');
   values.push(
@@ -654,6 +656,7 @@ async function updateActivityInDb(id, item){
   const hasCountNumberCol = cols.has('count_number');
   const hasMissionCol = cols.has('mission');
   const hasActivityTypeCol = cols.has('activity_type');
+  const hasCountryCol = cols.has('country');
 
   const rawItem = ensureDerivedActivityFields(item);
 
@@ -671,6 +674,7 @@ async function updateActivityInDb(id, item){
   if(hasCountNumberCol) add('count_number', rawItem.count_number == null ? null : Number(rawItem.count_number));
   if(hasMissionCol) add('mission', rawItem.mission || null);
   if(hasActivityTypeCol) add('activity_type', rawItem.activity_type || null);
+  if(hasCountryCol) add('country', rawItem.country || null);
   add('location', rawItem.location || null);
   add('latitude', (typeof rawItem.lat === 'number') ? rawItem.lat : null);
   add('longitude', (typeof rawItem.lng === 'number') ? rawItem.lng : null);
@@ -1070,11 +1074,26 @@ function parseCountNumberLoose(value){
   return Math.round(n);
 }
 
+function parseCountryFromLocationLoose(location){
+  const s = String(location || '').trim();
+  if(!s) return '';
+  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+  if(parts.length >= 2) return parts[parts.length - 1];
+  return '';
+}
+
 function ensureDerivedActivityFields(item){
   const next = Object.assign({}, item || {});
   // Always keep mission/activity_type mirrored in raw for later parsing.
   next.mission = next.mission == null ? '' : String(next.mission);
   next.activity_type = next.activity_type == null ? '' : String(next.activity_type);
+
+  // Derive country from location string (best-effort).
+  // Example: "Gombak, Malaysia" -> "Malaysia".
+  next.country = next.country == null ? '' : String(next.country);
+  if(!next.country){
+    next.country = parseCountryFromLocationLoose(next.location);
+  }
 
   // Derive numeric count for aggregations (especially for distribution).
   // Keep `count` as-is (string or number) for display, but store `count_number` as integer when detectable.
@@ -1103,6 +1122,7 @@ async function sendPreview(chatId, s){
     date: safeDateISO(s.data.date),
     count: s.data.count,
     count_number: parseCountNumberLoose(s.data.count),
+    country: parseCountryFromLocationLoose(s.data.location),
     location: s.data.location,
     lat: s.data.lat,
     lng: s.data.lng,
