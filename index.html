@@ -177,7 +177,7 @@
       function updateKpi(items){
         try{
           var BASE = 31230;
-          var KPI = 10000000;
+          var KPI = 1000000;
           items = items || [];
           // sum of all distribution counts
           var sumAllDist = (items || []).reduce(function(s,it){ return s + (isDistributionType(it.activity_type) ? (Number(it.count_number) || 0) : 0); }, 0);
@@ -190,14 +190,14 @@
           var localTotal = BASE + sumLocalDist;
           var overallTotal = BASE + sumAllDist;
 
-          // percent by year (BASE + yearDist) relative to KPI
-          var pct = ( (BASE + sumYearDist) / KPI ) * 100;
+          // percent based on global (overall) contributions relative to KPI
+          var pct = ( overallTotal / KPI ) * 100;
           if(!isFinite(pct)) pct = 0;
           pct = Math.max(0, Math.min(100, pct));
 
           // update dom
           try{ var elLocal = document.getElementById('kpi-local-count'); if(elLocal) elLocal.textContent = formatNumber(localTotal); }catch(e){}
-          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.textContent = formatNumber(overallTotal); }catch(e){}
+          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(overallTotal) + '</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY ' + formatNumber(localTotal) + '</span>'; }catch(e){}
           try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
           try{ var pi = document.getElementById('progressInner'); if(pi) { pi.style.width = pct.toFixed(2) + '%'; pi.setAttribute('aria-valuenow', pct.toFixed(2)); } }catch(e){}
           try{ var pp = document.getElementById('progressPercent'); if(pp) pp.textContent = pct.toFixed(2) + '%'; }catch(e){}
@@ -1556,6 +1556,13 @@
   .kpi-numbers { margin-left:auto; display:flex; gap:18px; }
   .kpi-numbers .item small { display:block; opacity:.7; font-size:12px; }
   .kpi-numbers .item b { font-weight:800; font-size:16px; }
+
+  .kpi-badge {
+    display:inline-block; margin-left:8px; background:rgba(190,170,141,0.06);
+    color:#BEAA8D; border:1px solid rgba(190,170,141,0.12);
+    padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; vertical-align:middle;
+  }
+  .kpi-all-num { font-weight:800; }
 
   .progress-outer {
     width:100%; height:16px; 
