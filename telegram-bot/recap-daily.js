@@ -13,6 +13,7 @@
 
   Optional env:
     - RECAP_MISSION (default: "Syria")
+    - RECAP_MISSIONS (comma-separated override, e.g. "Syria,Palestin,Quran")
     - RECAP_TZ_OFFSET_MINUTES (default: 480) // Malaysia UTC+8
     - RECAP_POST_EMPTY (default: "false")
     - BRAND_SIGNATURE_TEXT (default: "@inspirasiquranlive")
@@ -25,6 +26,7 @@ const DB_URL = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL || '
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const RECAP_MISSION = String(process.env.RECAP_MISSION || 'Syria').trim();
+const RECAP_MISSIONS = String(process.env.RECAP_MISSIONS || '').trim();
 const RECAP_TZ_OFFSET_MINUTES = Number(process.env.RECAP_TZ_OFFSET_MINUTES || 480);
 const RECAP_POST_EMPTY = String(process.env.RECAP_POST_EMPTY || 'false').toLowerCase() === 'true';
 const BRAND_SIGNATURE_TEXT = String(process.env.BRAND_SIGNATURE_TEXT || '@inspirasiquranlive');
@@ -170,6 +172,51 @@ function buildRecapHtml({ mission, dateLabel, activities, totalMushaf, topLocati
   return lines.join('\n');
 }
 
+function parseMissionList(value){
+  const raw = String(value || '').trim();
+  if(!raw) return [];
+  return raw
+    .split(',')
+    .map(s => String(s || '').trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+async function getActiveMissionsFromDb(pool){
+  // mission_options may not exist yet; treat as optional.
+  try{
+    const r = await pool.query(
+      'SELECT name FROM mission_options WHERE active = true ORDER BY sort_order NULLS LAST, name ASC'
+    );
+    return (r.rows || []).map(x => String(x.name || '').trim()).filter(Boolean);
+  }catch(e){
+    return [];
+  }
+}
+
+function escapeRegexLiteral(s){
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isDistributionActivity(activityType){
+  return String(activityType || '').toLowerCase() === 'distribution';
+}
+
+function missionMatchesRow(row, mission){
+  const m = String(mission || '').trim();
+  if(!m) return false;
+  const mLower = m.toLowerCase();
+
+  // Preferred: explicit raw.mission
+  if(row.raw_mission_lower && row.raw_mission_lower === mLower) return true;
+
+  // Fallback: parse legacy note
+  const noteText = String(row.note || '').trim();
+  if(!noteText) return false;
+  const missionRegex = new RegExp(`\\b(misi|mission)\\s*${escapeRegexLiteral(m)}\\b`, 'i');
+  return missionRegex.test(noteText);
+}
+
 async function main(){
   mustEnv('DATABASE_URL (or NETLIFY_DATABASE_URL)', DB_URL);
   mustEnv('TELEGRAM_BOT_TOKEN', TELEGRAM_BOT_TOKEN);
@@ -179,6 +226,18 @@ async function main(){
   const dateLabel = formatLocalDateLabel(localYMD);
 
   const pool = new Pool({ connectionString: DB_URL });
+
+  // Mission list priority:
+  // 1) RECAP_MISSIONS (explicit override)
+  // 2) mission_options table (dynamic)
+  // 3) RECAP_MISSION (single)
+  let missions = parseMissionList(RECAP_MISSIONS);
+  if(missions.length === 0){
+    missions = await getActiveMissionsFromDb(pool);
+  }
+  if(missions.length === 0){
+    missions = [RECAP_MISSION].filter(Boolean);
+  }
 
   // NOTE: raw is stored as JSON string by the bot.
   // We extract fields from raw::jsonb when possible.
@@ -208,13 +267,8 @@ async function main(){
     const activityType = rawObj && rawObj.activity_type ? String(rawObj.activity_type) : '';
     const highlights = rawObj && rawObj.highlights ? String(rawObj.highlights) : '';
 
-    // Mission match: prefer explicit raw.mission (new), then fall back to legacy note parsing.
     const rawMission = rawObj && rawObj.mission ? String(rawObj.mission).trim() : '';
-    const isMissionMatchByField = rawMission && rawMission.toLowerCase() === RECAP_MISSION.toLowerCase();
-
     const noteText = String((rawObj && rawObj.note) ? rawObj.note : (r.note || '')).trim();
-    const missionRegex = new RegExp(`\\b(misi|mission)\\s*${RECAP_MISSION.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
-    const isMissionMatch = Boolean(isMissionMatchByField || missionRegex.test(noteText));
 
     return {
       id: r.id,
@@ -225,88 +279,91 @@ async function main(){
       date: r.date,
       activity_type: activityType,
       highlights,
-      isMissionMatch
+      raw_mission: rawMission,
+      raw_mission_lower: rawMission ? rawMission.toLowerCase() : ''
     };
   });
 
-  const filtered = rows.filter(r => r.isMissionMatch && String(r.activity_type || '').toLowerCase() === 'distribution');
-
-  if(filtered.length === 0 && !RECAP_POST_EMPTY){
-    console.log(`[recap-daily] No distribution activities found for mission=${RECAP_MISSION} in ${dateLabel}. Skipping post.`);
-    await pool.end();
-    return;
-  }
-
-  // Summaries
-  const totalMushaf = filtered
-    .map(r => parseCountToNumber(r.count))
-    .filter(n => typeof n === 'number')
-    .reduce((a,b) => a + b, 0);
-
-  const locMap = new Map();
-  for(const r of filtered){
-    const name = simplifyPlaceName(r.location || '') || 'Unknown';
-    locMap.set(name, (locMap.get(name) || 0) + 1);
-  }
-  const topLocations = Array.from(locMap.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a,b) => b.count - a.count);
-
-  const bestHighlight = pickBestHighlight(filtered);
-
-  const html = buildRecapHtml({
-    mission: RECAP_MISSION,
-    dateLabel,
-    activities: filtered,
-    totalMushaf,
-    topLocations,
-    bestHighlight
-  });
-
-  // Insert a pending recap row that requires approval.
-  // NOTE: This assumes you've run telegram-bot/recap-schema.sql in Neon.
   const ins = `
     INSERT INTO recap_posts(
       mission, tz_offset_minutes, day_start_utc, day_end_utc, status, draft_html
     ) VALUES ($1,$2,$3,$4,'pending',$5)
     RETURNING id
   `;
-  const insRes = await pool.query(ins, [RECAP_MISSION, RECAP_TZ_OFFSET_MINUTES, startUtc.toISOString(), endUtc.toISOString(), html]);
-  const recapId = insRes.rows && insRes.rows[0] ? String(insRes.rows[0].id) : '';
-  if(!recapId) throw new Error('Failed to insert recap_posts row');
 
-  console.log(`[recap-daily] Created pending recap id=${recapId} activities=${filtered.length} mushaf=${totalMushaf} mission=${RECAP_MISSION} day=${dateLabel}`);
-
-  // Send preview to approver with inline buttons.
-  const keyboard = {
-    inline_keyboard: [[
-      { text: 'Approve ✅', callback_data: `_recap_approve:${recapId}` },
-      { text: 'Edit ✏️', callback_data: `_recap_edit:${recapId}` },
-      { text: 'Cancel ❌', callback_data: `_recap_cancel:${recapId}` }
-    ]]
-  };
-
-  const sent = await telegramApiRequest(TELEGRAM_BOT_TOKEN, 'sendMessage', {
-    chat_id: RECAP_APPROVER_CHAT_ID,
-    text: html,
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: keyboard
-  });
-
-  // Persist preview message metadata (for later edits).
-  try{
-    const msg = sent && sent.result ? sent.result : null;
-    const previewChatId = msg && msg.chat && (msg.chat.id != null) ? String(msg.chat.id) : String(RECAP_APPROVER_CHAT_ID);
-    const previewMessageId = msg && msg.message_id != null ? Number(msg.message_id) : null;
-    if(previewMessageId != null){
-      await pool.query(
-        'UPDATE recap_posts SET preview_chat_id = $2, preview_message_id = $3 WHERE id = $1',
-        [recapId, previewChatId, previewMessageId]
-      );
+  let createdCount = 0;
+  for(const mission of missions){
+    const filtered = rows.filter(r => missionMatchesRow(r, mission) && isDistributionActivity(r.activity_type));
+    if(filtered.length === 0 && !RECAP_POST_EMPTY){
+      console.log(`[recap-daily] No distribution activities found for mission=${mission} in ${dateLabel}. Skipping.`);
+      continue;
     }
-  }catch(e){
-    console.warn('[recap-daily] Failed to persist preview message metadata:', e && (e.message || e));
+
+    const totalMushaf = filtered
+      .map(r => parseCountToNumber(r.count))
+      .filter(n => typeof n === 'number')
+      .reduce((a,b) => a + b, 0);
+
+    const locMap = new Map();
+    for(const r of filtered){
+      const name = simplifyPlaceName(r.location || '') || 'Unknown';
+      locMap.set(name, (locMap.get(name) || 0) + 1);
+    }
+    const topLocations = Array.from(locMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a,b) => b.count - a.count);
+
+    const bestHighlight = pickBestHighlight(filtered);
+
+    const html = buildRecapHtml({
+      mission,
+      dateLabel,
+      activities: filtered,
+      totalMushaf,
+      topLocations,
+      bestHighlight
+    });
+
+    const insRes = await pool.query(ins, [mission, RECAP_TZ_OFFSET_MINUTES, startUtc.toISOString(), endUtc.toISOString(), html]);
+    const recapId = insRes.rows && insRes.rows[0] ? String(insRes.rows[0].id) : '';
+    if(!recapId) throw new Error('Failed to insert recap_posts row');
+
+    createdCount++;
+    console.log(`[recap-daily] Created pending recap id=${recapId} activities=${filtered.length} mushaf=${totalMushaf} mission=${mission} day=${dateLabel}`);
+
+    const keyboard = {
+      inline_keyboard: [[
+        { text: 'Approve ✅', callback_data: `_recap_approve:${recapId}` },
+        { text: 'Edit ✏️', callback_data: `_recap_edit:${recapId}` },
+        { text: 'Cancel ❌', callback_data: `_recap_cancel:${recapId}` }
+      ]]
+    };
+
+    const sent = await telegramApiRequest(TELEGRAM_BOT_TOKEN, 'sendMessage', {
+      chat_id: RECAP_APPROVER_CHAT_ID,
+      text: html,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: keyboard
+    });
+
+    try{
+      const msg = sent && sent.result ? sent.result : null;
+      const previewChatId = msg && msg.chat && (msg.chat.id != null) ? String(msg.chat.id) : String(RECAP_APPROVER_CHAT_ID);
+      const previewMessageId = msg && msg.message_id != null ? Number(msg.message_id) : null;
+      if(previewMessageId != null){
+        await pool.query(
+          'UPDATE recap_posts SET preview_chat_id = $2, preview_message_id = $3 WHERE id = $1',
+          [recapId, previewChatId, previewMessageId]
+        );
+      }
+    }catch(e){
+      console.warn('[recap-daily] Failed to persist preview message metadata:', e && (e.message || e));
+    }
+  }
+
+  if(createdCount === 0){
+    console.log(`[recap-daily] No recaps created for ${dateLabel} (missions=${missions.join(', ')}).`);
   }
 
   await pool.end();

@@ -59,6 +59,8 @@ The guided bot supports a **Mission** field (used for recaps/reporting).
 - You can manage mission categories (DB-backed) via:
   - `/missions`
   - `/mission_add <name>`
+  - `/mission_disable <name>` (temporarily stop generating recaps for that mission)
+  - `/mission_enable <name>`
 
 To enable DB-backed mission options, run `mission-schema.sql` in Neon:
 
@@ -101,7 +103,9 @@ Backward-compatible fallback:
 
 Optional environment variables
 
-- `RECAP_MISSION` (default `Syria`)
+- `RECAP_MISSION` (default `Syria`) — used when you want a single mission recap
+- `RECAP_MISSIONS` (optional) — comma-separated missions to generate in one run, e.g. `Syria,Palestin,Quran`
+  - If `RECAP_MISSIONS` is not set, the script will try to read missions from `mission_options` (if that table exists)
 - `RECAP_TZ_OFFSET_MINUTES` (default `480` for Malaysia UTC+8)
 - `RECAP_POST_EMPTY` (default `false`) — if `true`, posts even when there are no matching activities
 - `BRAND_SIGNATURE_TEXT` (default `@inspirasiquranlive`)
@@ -122,6 +126,30 @@ Railway setup (recommended)
 4. Add the required environment variables to the Cron Job.
 
 5. Ensure your main bot service (`server-guided.js`) is running continuously (replicas=1) so it can handle Approve/Edit/Cancel button callbacks.
+
+If Railway Cron UI is not available
+----------------------------------
+
+Some Railway projects/plans don't show a dedicated Cron Job feature.
+
+Fallback: run a second **Empty Service** as a scheduler loop (it does NOT poll Telegram, so no 409 conflicts).
+
+1. Create a new **Empty Service** in the same Railway project and connect it to the same repo.
+2. Set Start Command:
+
+  - Command: `cd telegram-bot && npm run recap:scheduler`
+
+3. Add Variables to this scheduler service:
+
+  - `DATABASE_URL`
+  - `TELEGRAM_BOT_TOKEN`
+  - `RECAP_APPROVER_CHAT_ID`
+  - `RECAP_MISSION` (optional)
+  - `RECAP_TZ_OFFSET_MINUTES` (optional, default 480)
+  - `RECAP_RUN_LOCAL_HH` (optional, default 22)
+  - `RECAP_RUN_LOCAL_MM` (optional, default 0)
+
+This will trigger `recap-daily.js` once per day at the configured local time.
 
 Notes
 

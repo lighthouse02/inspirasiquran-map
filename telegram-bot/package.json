@@ -5,7 +5,8 @@
   "main": "server-guided.js",
   "scripts": {
     "start": "node server-guided.js",
-    "recap:daily": "node recap-daily.js"
+    "recap:daily": "node recap-daily.js",
+    "recap:scheduler": "node recap-scheduler.js"
   },
   "author": "",
   "license": "MIT",

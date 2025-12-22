@@ -709,7 +709,7 @@ function saveActivities(arr){ fs.writeFileSync(ACTIVITIES_PATH, JSON.stringify(a
 function isAllowed(userId){ if(ALLOWED.length===0) return true; return ALLOWED.includes(userId); }
 
 function getHelpText(){
-  return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/missions - list mission categories\n/mission_add <name> - add a new mission category\n/cancel - cancel guided input\n
+  return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/missions - list mission categories\n/mission_add <name> - add a new mission category\n/mission_disable <name> - disable a mission (skip recaps)\n/mission_enable <name> - enable a mission\n/cancel - cancel guided input\n
 During /new you will be asked for a mission category and an activity type (transit/arrival/distribution/class/completion). You can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
 }
 
@@ -1386,6 +1386,52 @@ bot.onText(/\/mission_add\s+([\s\S]+)/i, async (msg, match)=>{
   }
 });
 
+bot.onText(/\/mission_disable\s+([\s\S]+)/i, async (msg, match)=>{
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  const rawName = match && match[1] ? String(match[1]) : '';
+  const name = normalizeMission(rawName).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+  if(!name) return bot.sendMessage(chatId, 'Usage: /mission_disable <name>');
+
+  if(!dbEnabled()) return bot.sendMessage(chatId, 'DB not configured. Cannot disable missions.');
+  try{
+    const pool = getDbPool();
+    if(!pool) throw new Error('DB is not configured');
+    await pool.query(
+      `INSERT INTO mission_options(name, active) VALUES ($1, false)
+       ON CONFLICT (name) DO UPDATE SET active = false`,
+      [name]
+    );
+    _missionOptionsCache = { at: 0, list: [] };
+    return bot.sendMessage(chatId, 'Mission disabled: ' + name + '\nIt will no longer generate recaps and won\'t appear in the mission picker.');
+  }catch(e){
+    return bot.sendMessage(chatId, 'Failed to disable mission. If this is your first time, run telegram-bot/mission-schema.sql in Neon.\nError: ' + (e.message || e));
+  }
+});
+
+bot.onText(/\/mission_enable\s+([\s\S]+)/i, async (msg, match)=>{
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  const rawName = match && match[1] ? String(match[1]) : '';
+  const name = normalizeMission(rawName).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+  if(!name) return bot.sendMessage(chatId, 'Usage: /mission_enable <name>');
+
+  if(!dbEnabled()) return bot.sendMessage(chatId, 'DB not configured. Cannot enable missions.');
+  try{
+    const pool = getDbPool();
+    if(!pool) throw new Error('DB is not configured');
+    await pool.query(
+      `INSERT INTO mission_options(name, active) VALUES ($1, true)
+       ON CONFLICT (name) DO UPDATE SET active = true`,
+      [name]
+    );
+    _missionOptionsCache = { at: 0, list: [] };
+    return bot.sendMessage(chatId, 'Mission enabled: ' + name + '\nIt will generate recaps and appear in the mission picker.');
+  }catch(e){
+    return bot.sendMessage(chatId, 'Failed to enable mission. If this is your first time, run telegram-bot/mission-schema.sql in Neon.\nError: ' + (e.message || e));
+  }
+});
+
 // Allow skipping steps in the guided flow from any step.
 bot.onText(/\/skip(?:@\w+)?/i, (msg)=>{
   const chatId = msg.chat.id;
@@ -1549,6 +1595,44 @@ bot.on('message', async (msg)=>{
           return void bot.sendMessage(chatId, 'Added mission: ' + name + '\nUse /missions to verify.');
         }catch(e){
           return void bot.sendMessage(chatId, 'Failed to add mission. If this is your first time, run telegram-bot/mission-schema.sql in Neon.\nError: ' + (e.message || e));
+        }
+      }
+      if(cmd === 'mission_disable'){
+        if(!isAllowed(msg.from.id)) return void bot.sendMessage(chatId, 'Not authorized');
+        const name = normalizeMission(arg).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+        if(!name) return void bot.sendMessage(chatId, 'Usage: /mission_disable <name>');
+        if(!dbEnabled()) return void bot.sendMessage(chatId, 'DB not configured. Cannot disable missions.');
+        try{
+          const pool = getDbPool();
+          if(!pool) throw new Error('DB is not configured');
+          await pool.query(
+            `INSERT INTO mission_options(name, active) VALUES ($1, false)
+             ON CONFLICT (name) DO UPDATE SET active = false`,
+            [name]
+          );
+          _missionOptionsCache = { at: 0, list: [] };
+          return void bot.sendMessage(chatId, 'Mission disabled: ' + name);
+        }catch(e){
+          return void bot.sendMessage(chatId, 'Failed to disable mission: ' + (e.message || e));
+        }
+      }
+      if(cmd === 'mission_enable'){
+        if(!isAllowed(msg.from.id)) return void bot.sendMessage(chatId, 'Not authorized');
+        const name = normalizeMission(arg).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+        if(!name) return void bot.sendMessage(chatId, 'Usage: /mission_enable <name>');
+        if(!dbEnabled()) return void bot.sendMessage(chatId, 'DB not configured. Cannot enable missions.');
+        try{
+          const pool = getDbPool();
+          if(!pool) throw new Error('DB is not configured');
+          await pool.query(
+            `INSERT INTO mission_options(name, active) VALUES ($1, true)
+             ON CONFLICT (name) DO UPDATE SET active = true`,
+            [name]
+          );
+          _missionOptionsCache = { at: 0, list: [] };
+          return void bot.sendMessage(chatId, 'Mission enabled: ' + name);
+        }catch(e){
+          return void bot.sendMessage(chatId, 'Failed to enable mission: ' + (e.message || e));
         }
       }
       if(cmd === 'skip'){
