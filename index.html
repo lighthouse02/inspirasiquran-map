@@ -349,7 +349,7 @@
           if(isFinite(ts) && ts >= cutoff) buckets[key].delta30 += c;
         }
 
-        var rows = Object.keys(buckets).map(function(k){ return buckets[k]; });
+        var rows = Object.keys(buckets).map(function(k){ var v = buckets[k]; v._key = k; return v; });
         rows.sort(function(a,b){
           if(b.total !== a.total) return b.total - a.total;
           return String(a.mission).localeCompare(String(b.mission));
@@ -362,7 +362,7 @@
 
         tbody.innerHTML = rows.map(function(r){
           var delta = r.delta30 > 0 ? ('<span class="delta">+' + escapeHtml(formatNumber(r.delta30)) + '</span>') : '';
-          return '<tr>'
+          return '<tr data-key="' + escapeAttr(r._key) + '">' 
             + '<td>' + escapeHtml(r.mission) + '</td>'
             + '<td>' + escapeHtml(r.country || '—') + '</td>'
             + '<td>' + escapeHtml(r.location) + '</td>'
@@ -370,6 +370,53 @@
             + '<td class="num">' + delta + '</td>'
             + '</tr>';
         }).join('');
+
+        // attach click handlers to table rows to highlight matching markers on the map
+        try{
+          Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', function(){
+              var key = tr.getAttribute('data-key');
+              try{ highlightTableBucket(key); }catch(e){ console.warn('Highlight bucket failed', e); }
+            });
+          });
+        }catch(e){}
+      }
+
+      function highlightTableBucket(key){
+        if(!key) return;
+        var parts = String(key).split('||');
+        var mission = (parts[0] === '—') ? '' : parts[0];
+        var location = (parts[1] === '—') ? '' : parts[1];
+        var matched = (lastItems || []).filter(function(it){
+          var m = String(it.mission || '').trim() || '';
+          var p = String(it.location || '').trim() || '';
+          return ( (mission === '' ? (m === '' ) : (m === mission)) && p === location );
+        });
+        if(!matched.length){
+          matched = (lastItems || []).filter(function(it){ return String(it.location||'').trim() === location; });
+        }
+        if(!matched.length) return;
+        var markers = matched.map(function(it){ return markersById[it.id]; }).filter(Boolean);
+        if(!markers.length) return;
+        var first = markers[0];
+        try{
+          var prevBounds = null; try{ prevBounds = map.getMaxBounds ? map.getMaxBounds() : null; }catch(e){}
+          try{ map.setMaxBounds && map.setMaxBounds(null); }catch(e){}
+          map.setView(first.getLatLng(), Math.max(6, map.getZoom()));
+          first.openPopup && first.openPopup();
+          setTimeout(function(){ try{ if(prevBounds) map.setMaxBounds(prevBounds); }catch(e){} }, 3000);
+        }catch(e){ }
+        // temporarily emphasize markers
+        markers.forEach(function(m){
+          try{
+            if(!m._origStyle) m._origStyle = { color: m.options && m.options.color, fillColor: m.options && m.options.fillColor, radius: m.options && m.options.radius, weight: m.options && m.options.weight };
+            m.setStyle && m.setStyle({ color: '#ffd54f', fillColor: '#ffd54f', radius: (m._origStyle.radius || 6) + 4, weight: 2 });
+          }catch(e){}
+        });
+        setTimeout(function(){
+          markers.forEach(function(m){ try{ if(m && m.setStyle && m._origStyle) m.setStyle(m._origStyle); }catch(e){} });
+        }, 3000);
       }
 
       async function load(){
@@ -828,7 +875,11 @@
           });
 
           if(it.lat!=null && it.lng!=null){
-            const m = L.circleMarker([it.lat, it.lng], { radius:6, color:'#ff6b6b', fill: true, fillColor: '#ff6b6b', fillOpacity: 0.95, weight: 1 });
+            // Distinctive marker: green for distributions, red for other activity types
+            var isDistribution = (String(it.activity_type || '').toLowerCase().indexOf('distribution') !== -1);
+            var markerColor = isDistribution ? '#38b169' : '#ff6b6b';
+            var markerRadius = isDistribution ? 8 : 6;
+            const m = L.circleMarker([it.lat, it.lng], { radius:markerRadius, color:markerColor, fill: true, fillColor: markerColor, fillOpacity: 0.95, weight: 1, className: isDistribution ? 'marker-distribution' : 'marker-other' });
             // try to add to markerLayer, fallback to map if markerLayer isn't a proper LayerGroup
             try{ if(markerLayer && typeof markerLayer.addLayer === 'function'){ markerLayer.addLayer(m); } else { m.addTo(map); } }catch(e){ try{ m.addTo(map); }catch(_){ console.warn('Failed to add marker to any layer', _); } }
             const popupTitle = escapeHtml(it.title || '');
