@@ -183,7 +183,7 @@
       function updateKpi(items){
         try{
           var BASE = 31230;
-          var KPI = 1000000;
+          var KPI = 10000000;
           items = items || [];
           // sum of all distribution counts
           var sumAllDist = (items || []).reduce(function(s,it){ return s + (isDistributionType(it.activity_type) ? (Number(it.count_number) || 0) : 0); }, 0);
