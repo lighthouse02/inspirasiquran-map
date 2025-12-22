@@ -190,8 +190,8 @@
           var localTotal = BASE + sumLocalDist;
           var overallTotal = BASE + sumAllDist;
 
-          // percent based on global (overall) contributions relative to KPI
-          var pct = ( overallTotal / KPI ) * 100;
+          // percent based on BASE plus added distribution counts (BASE + all distribution contributions)
+          var pct = ( (BASE + sumAllDist) / KPI ) * 100;
           if(!isFinite(pct)) pct = 0;
           pct = Math.max(0, Math.min(100, pct));
 
@@ -199,7 +199,13 @@
           try{ var elLocal = document.getElementById('kpi-local-count'); if(elLocal) elLocal.textContent = formatNumber(localTotal); }catch(e){}
           try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(overallTotal) + '</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY ' + formatNumber(localTotal) + '</span>'; }catch(e){}
           try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
-          try{ var pi = document.getElementById('progressInner'); if(pi) { pi.style.width = pct.toFixed(2) + '%'; pi.setAttribute('aria-valuenow', pct.toFixed(2)); } }catch(e){}
+          try{ var pi = document.getElementById('progressInner'); if(pi) {
+              // apply new width (CSS transition will animate)
+              pi.style.width = pct.toFixed(2) + '%';
+              pi.setAttribute('aria-valuenow', pct.toFixed(2));
+              // trigger shimmer animation by toggling class
+              try{ pi.classList.remove('animate-shimmer'); void pi.offsetWidth; pi.classList.add('animate-shimmer'); setTimeout(function(){ try{ pi.classList.remove('animate-shimmer'); }catch(e){} }, 1000); }catch(e){}
+            } }catch(e){}
           try{ var pp = document.getElementById('progressPercent'); if(pp) pp.textContent = pct.toFixed(2) + '%'; }catch(e){}
           try{ var pt = document.getElementById('progressTarget'); if(pt) pt.textContent = formatNumber(KPI); }catch(e){}
           try{ var months = computeMonthlyDistribution(items); renderSparkline(months); }catch(e){}
@@ -1574,8 +1580,20 @@
     height:100%; width:0%;
     background:#BEAA8D;
     border-right:2px solid rgba(255,255,255,.25);
-    transition: width .8s ease;
+    transition: width .9s cubic-bezier(.2,.9,.2,1);
+    position:relative; overflow:hidden;
   }
+
+  .progress-inner.animate-shimmer::after{
+    content: '';
+    position: absolute; left: -40%; top: 0; height: 100%; width: 40%;
+    background: linear-gradient(90deg, rgba(255,255,255,0.00), rgba(255,255,255,0.14), rgba(255,255,255,0.00));
+    transform: skewX(-12deg);
+    animation: shimmer 900ms ease-out;
+    pointer-events: none;
+  }
+
+  @keyframes shimmer{ from{ left: -40%; } to{ left: 120%; } }
   .progress-foot {
     display:flex; justify-content:space-between; 
     font-size:12px; opacity:.8; margin-top:8px;
