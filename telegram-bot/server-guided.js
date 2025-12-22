@@ -137,6 +137,69 @@ function activityTypeStyle(type){
   return map[t] || { emoji: '📍', headline: 'Kemas Kini Amanah', phase: 'Update' };
 }
 
+function formatDateUTCWithDot(isoOrDate){
+  const s = formatDateUTC(isoOrDate);
+  // formatDateUTC returns e.g. "1 Dec 2025, 02:40 UTC"; match "1 Dec 2025 · 02:40 UTC"
+  return s ? s.replace(/,\s*/, ' · ') : '';
+}
+
+function activityTypeLabelUpper(type){
+  const t = normalizeActivityType(type);
+  return t ? t.replace(/_/g, ' ').toUpperCase() : '';
+}
+
+function extractMissionName(missionLine){
+  const raw = String(missionLine || '').trim();
+  if(!raw) return '';
+  // Accept: "Misi Syria 🇸🇾" or "Mission Syria" etc
+  return raw.replace(/^\s*(misi|mission)\s*[:\-]?\s*/i, '').trim();
+}
+
+function attachmentLabel(att){
+  const t = String(att && att.type ? att.type : '').toLowerCase();
+  if(t === 'photo') return { emoji: '📸', text: 'Photo' };
+  if(t === 'doc' || t === 'document') return { emoji: '📎', text: 'Document' };
+  return null;
+}
+
+function buildTelegramV3Markdown(item){
+  const safeTitle = escapeMarkdown(item && item.title ? String(item.title) : '');
+  const type = normalizeActivityType(item && item.activity_type ? item.activity_type : '');
+  const style = activityTypeStyle(type);
+  const typeUpper = activityTypeLabelUpper(type) || 'UPDATE';
+  const place = escapeMarkdown(simplifyPlaceName(item && item.location ? String(item.location) : ''));
+  const when = escapeMarkdown(formatDateUTCWithDot(item && item.date ? item.date : (item && item.dateRaw ? item.dateRaw : '')));
+  const missionSplit = splitMissionAndNote(item && item.note ? String(item.note) : '');
+  const missionName = escapeMarkdown(extractMissionName(missionSplit.mission));
+  const att = (item && item.attachment) ? item.attachment : null;
+  const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
+
+  const DIV = '━━━━━━━━━━━━━━━━━━━━';
+  const lines = [];
+  lines.push(DIV);
+  lines.push(`${style.emoji} MISI · ${typeUpper}`);
+  lines.push(DIV);
+  lines.push('');
+
+  if(safeTitle) lines.push(`👤 *${safeTitle}*`);
+  if(place) lines.push(`📍 _${place}_`);
+  if(when) lines.push(`🕒 ${when}`);
+
+  if(missionName){
+    lines.push('');
+    lines.push(`📝 *Misi:* ${missionName}`);
+  }
+  if(attL){
+    lines.push(`${attL.emoji} _${escapeMarkdown(attL.text)}_`);
+  }
+
+  // Brand footer (monospace)
+  lines.push('');
+  lines.push('');
+  lines.push(`\`${escapeMarkdown(BRAND_SIGNATURE_TEXT)}\``);
+  return lines.join('\n');
+}
+
 function splitMissionAndNote(note){
   const raw = String(note || '').trim();
   if(!raw) return { mission: '', note: '' };
@@ -265,50 +328,8 @@ async function ensurePublicAttachmentUrl(item){
 }
 
 function buildAnnouncementText(item, action){
-  const title = item && item.title ? String(item.title) : 'Activity';
-  const dateText = item && item.date ? formatDateUTC(item.date) : (item && item.dateRaw ? String(item.dateRaw) : '');
-  const countText = (item && item.count != null && String(item.count).trim() !== '') ? String(item.count) : '';
-  const locationText = item && item.location ? simplifyPlaceName(item.location) : '';
-  const noteText = item && item.note ? String(item.note) : '';
-  const type = normalizeActivityType(item && item.activity_type ? item.activity_type : (item && item.type ? item.type : ''));
-  const style = activityTypeStyle(type);
-  const missionSplit = splitMissionAndNote(noteText);
-
-  const lines = [];
-  lines.push(`<b>${escapeHtml(style.emoji + ' ' + style.headline)}</b>`);
-  if(type) lines.push(`${escapeHtml('🏷️ ' + style.phase + ' · ' + type)}`);
-  lines.push('');
-
-  if(locationText){
-    lines.push(`${escapeHtml(title)} kini berada di`);
-    lines.push(`${escapeHtml(locationText)}`);
-  }else{
-    lines.push(`${escapeHtml(title)}`);
-  }
-
-  lines.push('');
-  if(dateText) lines.push(`${escapeHtml('🗓 ' + dateText)}`);
-  if(missionSplit.mission) lines.push(`${escapeHtml('🕌 ' + missionSplit.mission)}`);
-  if(countText) lines.push(`${escapeHtml('📦 ' + countText)}`);
-
-  if(missionSplit.note){
-    lines.push('');
-    // Keep note formatting but still HTML-safe
-    const noteLines = String(missionSplit.note).split(/\r?\n/);
-    for(const nl of noteLines){
-      const trimmed = String(nl || '').trim();
-      if(trimmed) lines.push(escapeHtml(trimmed));
-    }
-  }
-
-  const hasAttachment = Boolean(getAttachmentSendTarget(item));
-  if(hasAttachment) lines.push(escapeHtml('📎 Lampiran disertakan'));
-
-  // Brand footer
-  lines.push('');
-  lines.push('');
-  lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
-  return lines.join('\n');
+  // Telegram v3 announcement (Markdown)
+  return buildTelegramV3Markdown(item);
 }
 
 function getAttachmentSendTarget(item){
@@ -338,17 +359,17 @@ async function announceToChannelIfConfigured(item, action){
       // Telegram caption is limited; keep it safe.
       const caption = text.length > 950 ? (text.slice(0, 947) + '…') : text;
       if(kind === 'doc' || kind === 'document'){
-        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'Markdown' });
       } else {
-        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'Markdown' });
       }
       if(text.length > caption.length){
-        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'Markdown', disable_web_page_preview: true });
       }
       return;
     }
 
-    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'Markdown', disable_web_page_preview: true });
   }catch(e){
     console.warn('Channel announce failed (check TELEGRAM_CHANNEL_ID and bot permissions):', e && (e.response && e.response.body ? e.response.body : e.message || e));
   }
@@ -773,32 +794,7 @@ async function sendPreview(chatId, s){
   s.pending = item;
   s.step = 'confirming';
 
-  const displayDate = item.date ? formatDateUTC(item.date) : (item.dateRaw || '');
-  const type = normalizeActivityType(item.activity_type);
-  const style = activityTypeStyle(type);
-  const place = simplifyPlaceName(item.location);
-  const missionSplit = splitMissionAndNote(item.note);
-
-  // Telegram v3 preview (Markdown)
-  let preview = `*${escapeMarkdown(style.emoji + ' ' + style.headline)}*`;
-  if(type) preview += `\n${escapeMarkdown('🏷️ ' + style.phase + ' · ' + type)}`;
-  preview += `\n\n`;
-  if(place){
-    preview += `${escapeMarkdown(String(item.title||''))} kini berada di\n${escapeMarkdown(place)}`;
-  }else{
-    preview += `${escapeMarkdown(String(item.title||''))}`;
-  }
-  preview += `\n\n`;
-  if(displayDate) preview += `${escapeMarkdown('🗓 ' + displayDate)}\n`;
-  if(missionSplit.mission) preview += `${escapeMarkdown('🕌 ' + missionSplit.mission)}\n`;
-  if(item.count != null && String(item.count).trim() !== '') preview += `${escapeMarkdown('📦 ' + String(item.count))}\n`;
-  if(missionSplit.note){
-    preview += `\n${escapeMarkdown(String(missionSplit.note))}`;
-  }
-  if(item.attachment && item.attachment.type) preview += `\n\n${escapeMarkdown('📎 Lampiran disertakan')}`;
-
-  // Brand footer (monospace)
-  preview += `\n\n\n\`${BRAND_SIGNATURE_TEXT}\``;
+  const preview = buildTelegramV3Markdown(item);
 
   const keyboard = { inline_keyboard: [[{ text: 'Confirm ✅', callback_data: '_confirm' }, { text: 'Cancel ❌', callback_data: '_cancel' }]] };
   try{
