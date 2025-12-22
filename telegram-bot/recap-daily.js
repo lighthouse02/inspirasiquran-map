@@ -2,13 +2,14 @@
   Daily Recap (auto) for InspirasiQuran
 
   - Queries Neon Postgres for today's *distribution* activities for a mission (default: Syria)
-  - Posts a single recap message to TELEGRAM_CHANNEL_ID
+  - Creates a pending recap draft and sends it to an approver
+  - The always-on bot (server-guided.js) posts it to your public channel ONLY after approval
   - Designed for Railway Cron / one-shot execution (NO polling)
 
   Required env:
     - DATABASE_URL (or NETLIFY_DATABASE_URL)
     - TELEGRAM_BOT_TOKEN
-    - TELEGRAM_CHANNEL_ID
+    - RECAP_APPROVER_CHAT_ID
 
   Optional env:
     - RECAP_MISSION (default: "Syria")
@@ -22,7 +23,6 @@ const { Pool } = require('pg');
 
 const DB_URL = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL || '';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID || '';
 
 const RECAP_MISSION = String(process.env.RECAP_MISSION || 'Syria').trim();
 const RECAP_TZ_OFFSET_MINUTES = Number(process.env.RECAP_TZ_OFFSET_MINUTES || 480);
@@ -173,7 +173,6 @@ function buildRecapHtml({ mission, dateLabel, activities, totalMushaf, topLocati
 async function main(){
   mustEnv('DATABASE_URL (or NETLIFY_DATABASE_URL)', DB_URL);
   mustEnv('TELEGRAM_BOT_TOKEN', TELEGRAM_BOT_TOKEN);
-  mustEnv('TELEGRAM_CHANNEL_ID', TELEGRAM_CHANNEL_ID);
   mustEnv('RECAP_APPROVER_CHAT_ID', RECAP_APPROVER_CHAT_ID);
 
   const { startUtc, endUtc, localYMD } = startOfDayUtcRange(new Date(), RECAP_TZ_OFFSET_MINUTES);

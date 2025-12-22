@@ -33,8 +33,26 @@ if(!TOKEN){
 
 const ALLOWED = (process.env.ALLOWED_TELEGRAM_IDS || '').split(',').map(s=>s.trim()).filter(Boolean).map(Number);
 // Optional: announce saved activities to a Telegram channel/chat.
-// Set TELEGRAM_CHANNEL_ID (e.g. -1001234567890 or @yourchannelusername)
-const ANNOUNCE_CHAT_ID = (process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_ANNOUNCE_CHAT_ID || '').trim();
+// Recommended:
+//   - TELEGRAM_LOG_CHANNEL_ID: where each activity post goes (your private logs channel)
+//   - TELEGRAM_PUBLIC_CHANNEL_ID: where daily recap gets posted (your public channel)
+// Backward-compatible fallbacks:
+//   - TELEGRAM_CHANNEL_ID / TELEGRAM_ANNOUNCE_CHAT_ID
+const ACTIVITY_LOG_CHAT_ID = (
+  process.env.TELEGRAM_LOG_CHANNEL_ID ||
+  process.env.TELEGRAM_ACTIVITY_LOG_CHAT_ID ||
+  process.env.TELEGRAM_CHANNEL_ID ||
+  process.env.TELEGRAM_ANNOUNCE_CHAT_ID ||
+  ''
+).trim();
+
+const RECAP_PUBLIC_CHAT_ID = (
+  process.env.TELEGRAM_PUBLIC_CHANNEL_ID ||
+  process.env.TELEGRAM_RECAP_CHANNEL_ID ||
+  process.env.TELEGRAM_CHANNEL_ID ||
+  process.env.TELEGRAM_ANNOUNCE_CHAT_ID ||
+  ''
+).trim();
 
 // Polling mode (long polling via getUpdates). NOTE: Telegram allows only ONE active getUpdates consumer per bot.
 // If you deploy with >1 instance (replicas/autoscaling) or run locally while deployed, you will hit:
@@ -473,7 +491,7 @@ function getAttachmentSendTarget(item){
 }
 
 async function announceToChannelIfConfigured(item, action){
-  if(!ANNOUNCE_CHAT_ID) return;
+  if(!ACTIVITY_LOG_CHAT_ID) return;
   const text = buildAnnouncementText(item, action);
   const attachment = getAttachmentSendTarget(item);
 
@@ -483,19 +501,19 @@ async function announceToChannelIfConfigured(item, action){
       // Telegram caption is limited; keep it safe.
       const caption = text.length > 950 ? (text.slice(0, 947) + '…') : text;
       if(kind === 'doc' || kind === 'document'){
-        await bot.sendDocument(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+        await bot.sendDocument(ACTIVITY_LOG_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
       } else {
-        await bot.sendPhoto(ANNOUNCE_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
+        await bot.sendPhoto(ACTIVITY_LOG_CHAT_ID, attachment.target, { caption, parse_mode: 'HTML' });
       }
       if(text.length > caption.length){
-        await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+        await bot.sendMessage(ACTIVITY_LOG_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
       }
       return;
     }
 
-    await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+    await bot.sendMessage(ACTIVITY_LOG_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
   }catch(e){
-    console.warn('Channel announce failed (check TELEGRAM_CHANNEL_ID and bot permissions):', e && (e.response && e.response.body ? e.response.body : e.message || e));
+    console.warn('Channel announce failed (check TELEGRAM_LOG_CHANNEL_ID and bot permissions):', e && (e.response && e.response.body ? e.response.body : e.message || e));
   }
 }
 
@@ -2086,9 +2104,9 @@ bot.on('callback_query', async (cq) => {
       }
 
       if(action === '_recap_approve'){
-        if(!ANNOUNCE_CHAT_ID){
+        if(!RECAP_PUBLIC_CHAT_ID){
           await bot.answerCallbackQuery(cq.id, { text: 'No channel configured' });
-          await bot.sendMessage(chatId, 'Missing TELEGRAM_CHANNEL_ID / TELEGRAM_ANNOUNCE_CHAT_ID. Cannot post recap.');
+          await bot.sendMessage(chatId, 'Missing TELEGRAM_PUBLIC_CHANNEL_ID (or fallback TELEGRAM_CHANNEL_ID). Cannot post recap.');
           return;
         }
 
@@ -2100,8 +2118,8 @@ bot.on('callback_query', async (cq) => {
         }
 
         // Post to channel
-        const posted = await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
-        await markRecapPosted(recapId, ANNOUNCE_CHAT_ID, posted && posted.message_id);
+        const posted = await bot.sendMessage(RECAP_PUBLIC_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+        await markRecapPosted(recapId, RECAP_PUBLIC_CHAT_ID, posted && posted.message_id);
         try{ await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id }); }catch(e){}
         await bot.answerCallbackQuery(cq.id, { text: 'Posted' });
         await bot.sendMessage(chatId, 'Recap approved and posted.');

@@ -50,6 +50,20 @@ node server-guided.js
 
 This mode downloads attachments to `telegram-bot/uploads` and stores attachment metadata in `activities.json`.
 
+Mission categories
+------------------
+
+The guided bot supports a **Mission** field (used for recaps/reporting).
+
+- During `/new`, the bot asks for Mission (title → mission → type → …)
+- You can manage mission categories (DB-backed) via:
+  - `/missions`
+  - `/mission_add <name>`
+
+To enable DB-backed mission options, run `mission-schema.sql` in Neon:
+
+- `telegram-bot/mission-schema.sql`
+
 Daily Recap (Railway Cron)
 -------------------------
 
@@ -64,7 +78,7 @@ Approval flow
 
 - Cron job creates a `recap_posts` row with `status='pending'` and sends the draft to an approver chat with buttons.
 - Your always-on bot service (`server-guided.js`) receives the button callbacks:
-  - Approve ✅ → posts to `TELEGRAM_CHANNEL_ID`
+  - Approve ✅ → posts to `TELEGRAM_PUBLIC_CHANNEL_ID`
   - Edit ✏️ → lets you send a replacement text, then you can approve
   - Cancel ❌ → marks canceled
 
@@ -72,8 +86,18 @@ Required environment variables
 
 - `DATABASE_URL` (or `NETLIFY_DATABASE_URL`)
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHANNEL_ID` (e.g. `-100xxxxxxxxxx`)
 - `RECAP_APPROVER_CHAT_ID` (your personal chat id, or a private admin group id)
+
+Channel routing (recommended)
+
+To ensure **only recaps** go to your public channel, and **each activity** goes to a private logs channel:
+
+- `TELEGRAM_PUBLIC_CHANNEL_ID` — public channel (recap only)
+- `TELEGRAM_LOG_CHANNEL_ID` — private logs channel (each activity announce)
+
+Backward-compatible fallback:
+
+- If you don't set the new vars, the bot falls back to `TELEGRAM_CHANNEL_ID` / `TELEGRAM_ANNOUNCE_CHAT_ID`.
 
 Optional environment variables
 
@@ -102,6 +126,7 @@ Railway setup (recommended)
 Notes
 
 - The recap currently filters activities by:
-  - Mission text in note/raw like "Misi Syria" or "Mission Syria".
+  - `raw.mission === RECAP_MISSION` (preferred)
+  - fallback: mission text in note/raw like "Misi Syria" or "Mission Syria" (for older records)
   - `raw.activity_type === "distribution"`.
   If you want it to work for older records that don’t have `activity_type`, we can add a fallback.
