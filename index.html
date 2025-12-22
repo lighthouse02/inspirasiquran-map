@@ -483,7 +483,9 @@
         if(items.length){
           const times = items.map(i=>i.date.getTime());
           const minT = Math.min(...times), maxT = Math.max(...times);
-          timelineRange.min = minT; timelineRange.max = maxT; timelineRange.value = maxT; timelineLabel.textContent = new Date(parseInt(timelineRange.value)).toLocaleString();
+          timelineRange.min = minT; timelineRange.max = maxT; timelineRange.value = maxT;
+          // Timeline label should be count-only (no date/time)
+          try{ if(timelineLabel) timelineLabel.textContent = String(items.length); }catch(e){}
           // render page-level timeline dots if present
           try{
             var dotsRoot = document.getElementById('pageMapTimelineDots');
@@ -781,18 +783,17 @@
             }
             var labelText;
             if(total === 0){
-              labelText = 'No activities';
-            } else if(visible === total){
-              labelText = 'All (' + total + ')';
+              labelText = '0';
             } else {
-              labelText = visible + ' / ' + total + ' activities · ' + new Date(maxT).toLocaleString();
+              // count-only (no date/time, no "All")
+              labelText = String(visible);
             }
             // write to the preferred page-level label and also update the in-map label if present
             try{ if(timelineLabel) timelineLabel.textContent = labelText; }catch(e){}
             try{ var inMapLabel = document.getElementById('mapTimelineLabel'); if(inMapLabel) inMapLabel.textContent = labelText; }catch(e){}
           }catch(e){
-            // fallback to date when anything goes wrong
-            try{ var fallback = new Date(maxT).toLocaleString(); if(timelineLabel) timelineLabel.textContent = fallback; var inMapLabel = document.getElementById('mapTimelineLabel'); if(inMapLabel) inMapLabel.textContent = fallback; }catch(_){ if(timelineLabel) timelineLabel.textContent = 'Timeline'; }
+            // fallback to count when anything goes wrong
+            try{ var fallback = String((lastItems && lastItems.length) ? lastItems.length : 0); if(timelineLabel) timelineLabel.textContent = fallback; var inMapLabel = document.getElementById('mapTimelineLabel'); if(inMapLabel) inMapLabel.textContent = fallback; }catch(_){ if(timelineLabel) timelineLabel.textContent = '0'; }
           }
 
           // feed items
@@ -942,7 +943,7 @@
             <div id="pageMapTimeline" style="max-width:1180px;margin:8px auto 0;padding:0 16px;">
               <div style="background:transparent;display:flex;align-items:center;gap:12px;color:#cfc6b8;font-size:13px;">
                 <label style="min-width:78px;color:#cfc6b8;font-weight:700;">Timeline</label>
-                <div style="flex:1; position:relative; height:44px;">
+                <div style="flex:1; min-width:0; position:relative; height:44px;">
                   <!-- range sits inside a relative container so we can absolutely place incident buttons above it -->
                   <input id="pageMapTimelineRange" type="range" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);width:100%; height:14px; background:transparent; -webkit-appearance:none; appearance:none; z-index:3;">
                     <style>
@@ -960,7 +961,7 @@
                     <div id="pageMapTimelineDots" class="page-timeline-dots" aria-hidden="true"></div>
                   </div>
                 </div>
-                <div id="pageMapTimelineLabel" style="min-width:180px; text-align:right; color:#cfc6b8; font-size:13px;">All</div>
+                <div id="pageMapTimelineLabel" style="min-width:44px; text-align:right; color:#cfc6b8; font-size:13px; white-space:nowrap;">All</div>
               </div>
             </div>
 
