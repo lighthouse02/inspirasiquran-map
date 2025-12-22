@@ -23,11 +23,12 @@ exports.handler = async function(event) {
         })
       };
     }
-    const q = `SELECT id, title, note, created_at, activity_date, count, location, latitude AS lat, longitude AS lng, attachment_url
+    const q = `SELECT id, title, note, created_at, activity_date, count, location, latitude AS lat, longitude AS lng, attachment_url, raw
                FROM activities
                ORDER BY COALESCE(activity_date, created_at) ASC, created_at ASC`;
     const res = await pool.query(q);
     const rows = res.rows.map(r => ({
+      raw: r.raw,
       id: r.id,
       title: r.title,
       note: r.note,
@@ -39,10 +40,30 @@ exports.handler = async function(event) {
       lng: r.lng,
       attachment: r.attachment_url ? { webPath: r.attachment_url } : null
     }));
+
+    // Extract optional fields (like highlights) from raw JSON if present.
+    const normalized = rows.map(r => {
+      let rawObj = null;
+      try{
+        if(r.raw && typeof r.raw === 'string') rawObj = JSON.parse(r.raw);
+        else if(r.raw && typeof r.raw === 'object') rawObj = r.raw;
+      }catch(e){ rawObj = null; }
+
+      const highlights = rawObj && (rawObj.highlights || rawObj.highlight) ? String(rawObj.highlights || rawObj.highlight) : '';
+      const activity_type = rawObj && rawObj.activity_type ? String(rawObj.activity_type) : '';
+
+      // Do not return raw by default (keeps payload small), only derived fields.
+      const { raw, ...rest } = r;
+      return {
+        ...rest,
+        activity_type,
+        highlights: highlights || ''
+      };
+    });
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rows)
+      body: JSON.stringify(normalized)
     };
   } catch (err) {
     console.error('get-activities error', err);

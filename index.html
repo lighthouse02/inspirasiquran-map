@@ -467,7 +467,8 @@
           lat: (typeof it.lat==='number')?it.lat:(it.latitude||null),
           lng: (typeof it.lng==='number')?it.lng:(it.longitude||null),
           attachment: it.attachment || null,
-          note: it.note || ''
+          note: it.note || '',
+          highlights: it.highlights || ''
         })).sort((a,b)=> a.date - b.date);
 
         // update page header last-updated using newest activity timestamp
@@ -742,7 +743,14 @@
             const m = L.circleMarker([it.lat, it.lng], { radius:6, color:'#ff6b6b', fill: true, fillColor: '#ff6b6b', fillOpacity: 0.95, weight: 1 });
             // try to add to markerLayer, fallback to map if markerLayer isn't a proper LayerGroup
             try{ if(markerLayer && typeof markerLayer.addLayer === 'function'){ markerLayer.addLayer(m); } else { m.addTo(map); } }catch(e){ try{ m.addTo(map); }catch(_){ console.warn('Failed to add marker to any layer', _); } }
-            m.bindPopup(`<div style="color:#f4f2ee"><b>${it.title}</b><div style="opacity:.8;font-size:13px">${it.location}</div><div style="margin-top:6px">${it.note}</div><div style="margin-top:6px;font-weight:700">${it.count?it.count+' Mushaf':''}</div></div>`);
+            const popupTitle = escapeHtml(it.title || '');
+            const popupLoc = escapeHtml(it.location || '');
+            const popupNote = escapeHtml(it.note || '');
+            const popupCount = (it.count ? escapeHtml(String(it.count) + ' Mushaf') : '');
+            const popupHighlights = String(it.highlights || '').trim();
+            const highlightsTextHtml = popupHighlights ? escapeHtml(popupHighlights).replace(/\r?\n/g,'<br>') : '';
+            const highlightsHtml = popupHighlights ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font-weight:800">💬 Highlights</div><div style="opacity:.95;margin-top:6px;font-style:italic">“${highlightsTextHtml}”</div></div>` : '';
+            m.bindPopup(`<div style="color:#f4f2ee"><b>${popupTitle}</b><div style="opacity:.8;font-size:13px">${popupLoc}</div>${popupNote?`<div style="margin-top:6px">${popupNote}</div>`:''}${highlightsHtml}${popupCount?`<div style="margin-top:8px;font-weight:700">${popupCount}</div>`:''}</div>`);
             m._ts = it.date.getTime();
             markersById[it.id] = m;
           }

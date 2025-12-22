@@ -162,6 +162,23 @@ function attachmentLabel(att){
   return null;
 }
 
+function formatDialogQuoteMarkdown(text){
+  const t = String(text || '').trim();
+  if(!t) return '';
+  // Use curly quotes for a conversational / donor-dialogue feel.
+  // Keep internal newlines by converting them to explicit line breaks.
+  const escaped = escapeMarkdown(t);
+  return `“${escaped.replace(/\r?\n/g, '\n')}”`;
+}
+
+function formatDialogQuoteHtml(text){
+  const t = String(text || '').trim();
+  if(!t) return '';
+  // Telegram HTML supports <br> for line breaks.
+  const escaped = escapeHtml(t).replace(/\r?\n/g, '<br>');
+  return `“${escaped}”`;
+}
+
 function buildTelegramV3Markdown(item){
   const safeTitle = escapeMarkdown(item && item.title ? String(item.title) : '');
   const type = normalizeActivityType(item && item.activity_type ? item.activity_type : '');
@@ -171,6 +188,7 @@ function buildTelegramV3Markdown(item){
   const when = escapeMarkdown(formatDateUTCWithDot(item && item.date ? item.date : (item && item.dateRaw ? item.dateRaw : '')));
   const missionSplit = splitMissionAndNote(item && item.note ? String(item.note) : '');
   const missionName = escapeMarkdown(extractMissionName(missionSplit.mission));
+  const highlights = formatDialogQuoteMarkdown(item && item.highlights ? item.highlights : '');
   const att = (item && item.attachment) ? item.attachment : null;
   const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
 
@@ -188,6 +206,10 @@ function buildTelegramV3Markdown(item){
   if(missionName){
     lines.push('');
     lines.push(`📝 *Misi:* ${missionName}`);
+  }
+  if(highlights){
+    lines.push('');
+    lines.push(`💬 *Highlights:* _${highlights}_`);
   }
   if(attL){
     lines.push(`${attL.emoji} _${escapeMarkdown(attL.text)}_`);
@@ -209,6 +231,7 @@ function buildTelegramV3Html(item){
   const when = escapeHtml(formatDateUTCWithDot(item && item.date ? item.date : (item && item.dateRaw ? item.dateRaw : '')));
   const missionSplit = splitMissionAndNote(item && item.note ? String(item.note) : '');
   const missionName = escapeHtml(extractMissionName(missionSplit.mission));
+  const highlights = formatDialogQuoteHtml(item && item.highlights ? item.highlights : '');
   const att = (item && item.attachment) ? item.attachment : null;
   const attL = attachmentLabel(att) || (getAttachmentSendTarget(item) ? { emoji: '📎', text: 'Attachment' } : null);
 
@@ -226,6 +249,10 @@ function buildTelegramV3Html(item){
   if(missionName){
     lines.push('');
     lines.push(`📝 <b>Misi:</b> ${missionName}`);
+  }
+  if(highlights){
+    lines.push('');
+    lines.push(`💬 <b>Highlights:</b> <i>${highlights}</i>`);
   }
   if(attL){
     lines.push(`${escapeHtml(attL.emoji)} <i>${escapeHtml(attL.text)}</i>`);
@@ -899,6 +926,7 @@ async function sendPreview(chatId, s){
     lat: s.data.lat,
     lng: s.data.lng,
     note: s.data.note,
+    highlights: s.data.highlights,
     attachment: s.data.attachment||null
   };
 
@@ -956,6 +984,11 @@ async function handleSkip(chatId, s){
   }
   if(s.step === 'note'){
     s.data.note = '';
+    s.step = 'highlights';
+    return bot.sendMessage(chatId, 'Any highlights / memorable moments? (or /skip)', { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'highlights'){
+    s.data.highlights = '';
     return sendPreview(chatId, s);
   }
 }
@@ -981,7 +1014,8 @@ function beginGuidedFlow(msg){
 
 function stepPrev(step){
   const map = {
-    confirming: 'note',
+    confirming: 'highlights',
+    highlights: 'note',
     note: 'attachment',
     attachment: 'location',
     location: 'count',
@@ -1012,6 +1046,7 @@ async function promptForStep(chatId, s){
     const locationText = s.data.location || '';
     const hasAttachment = Boolean(s.data.attachment);
     const noteText = s.data.note || '';
+    const highlightsText = s.data.highlights || '';
 
     const summary =
       `Editing activity:\n` +
@@ -1022,13 +1057,14 @@ async function promptForStep(chatId, s){
       `• Location: ${locationText || '(empty)'}\n` +
       `• Attachment: ${hasAttachment ? 'set' : 'none'}\n` +
       `• Note: ${noteText ? '(set)' : '(empty)'}\n\n` +
+      `• Highlights: ${highlightsText ? '(set)' : '(empty)'}\n\n` +
       `Choose what to edit:`;
 
     const keyboard = {
       inline_keyboard: [
         [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Type', callback_data: '_edit_field_type' }, { text: 'Date', callback_data: '_edit_field_date' }],
         [{ text: 'Count', callback_data: '_edit_field_count' }, { text: 'Location', callback_data: '_edit_field_location' }, { text: 'Attachment', callback_data: '_edit_field_attachment' }],
-        [{ text: 'Note', callback_data: '_edit_field_note' }],
+        [{ text: 'Note', callback_data: '_edit_field_note' }, { text: 'Highlights', callback_data: '_edit_field_highlights' }],
         [{ text: 'Preview / Confirm', callback_data: '_edit_preview' }],
         [{ text: 'Edit all (guided)', callback_data: '_edit_all' }, { text: 'Cancel', callback_data: '_edit_cancel' }]
       ]
@@ -1085,6 +1121,13 @@ async function promptForStep(chatId, s){
       : 'Any note? (or /skip)';
     return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
   }
+  if(s.step === 'highlights'){
+    const cur = s.data.highlights || '';
+    const msg = (mode === 'edit')
+      ? `Current highlights: ${cur ? '"' + cur + '"' : '(empty)'}\nSend new highlights (or /skip to keep).`
+      : 'Any highlights / memorable moments? (or /skip)';
+    return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
 }
 
 async function beginEditFlow(msg, id){
@@ -1125,6 +1168,7 @@ async function beginEditFlow(msg, id){
       if(existing.raw){
         const rawObj = (typeof existing.raw === 'string') ? JSON.parse(existing.raw) : existing.raw;
         if(rawObj && rawObj.activity_type) s.data.activity_type = String(rawObj.activity_type);
+        if(rawObj && rawObj.highlights) s.data.highlights = String(rawObj.highlights);
       }
     }catch(e){ /* ignore */ }
     s.data.date = existing.date ? safeDateISO(existing.date) : (existing.activity_date ? safeDateISO(existing.activity_date) : safeDateISO(''));
@@ -1466,6 +1510,23 @@ bot.on('message', async (msg)=>{
         s.step = 'edit_menu';
         return promptForStep(chatId, s);
       }
+      s.step = 'highlights';
+      return promptForStep(chatId, s);
+    }
+    if(s.step==='highlights'){
+      if(msg.text && isSkipText(msg.text)){
+        if(s.mode !== 'edit') s.data.highlights = '';
+      } else if(typeof msg.text === 'string'){
+        s.data.highlights = msg.text;
+      } else if(typeof msg.caption === 'string'){
+        s.data.highlights = msg.caption;
+      } else {
+        s.data.highlights = s.data.highlights || '';
+      }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
+      }
       return sendPreview(chatId, s);
     }
   }catch(e){ console.error('session error', e); bot.sendMessage(chatId, 'Error occurred, session canceled'); endSession(chatId); }
@@ -1630,6 +1691,13 @@ bot.on('callback_query', async (cq) => {
       session.editMode = 'menu';
       session.step = 'note';
       await bot.answerCallbackQuery(cq.id, { text: 'Note' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_highlights'){
+      session.editMode = 'menu';
+      session.step = 'highlights';
+      await bot.answerCallbackQuery(cq.id, { text: 'Highlights' });
       await promptForStep(chatId, session);
       return;
     }
