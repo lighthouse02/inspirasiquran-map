@@ -183,28 +183,86 @@
     <script>
       function updateKpi(items){
         try{
-          var BASE = 31230;
           var KPI = 10000000;
           items = items || [];
-          // sum of all distribution counts
-          var sumAllDist = (items || []).reduce(function(s,it){ return s + (isDistributionType(it.activity_type) ? (Number(it.count_number) || 0) : 0); }, 0);
-          // year-to-date distributions
-          var yearStart = new Date((new Date()).getFullYear(), 0, 1).getTime();
-          var sumYearDist = (items || []).reduce(function(s,it){ var ts = toTs(it.date); if(!isFinite(ts)) ts = 0; return s + ((isDistributionType(it.activity_type) && ts >= yearStart) ? (Number(it.count_number) || 0) : 0); }, 0);
-          // local (Malaysia) distributions added to base
-          var sumLocalDist = (items || []).reduce(function(s,it){ var ctry = String(it.country||'').toLowerCase(); var loc = String(it.location||'').toLowerCase(); if(isDistributionType(it.activity_type) && (ctry.indexOf('malaysia')!==-1 || loc.indexOf('malaysia')!==-1)) return s + (Number(it.count_number) || 0); return s; }, 0);
 
-          var localTotal = BASE + sumLocalDist;
-          var overallTotal = BASE + sumAllDist;
+          // Capture baselines once (from initial DOM placeholders) so later HTML updates don't break parsing.
+          try{
+            if(typeof window.__kpiBaseMy !== 'number'){
+              var tMy = (document.getElementById('kpi-local-count') && document.getElementById('kpi-local-count').textContent) || '31230';
+              var nMy = Number(String(tMy).replace(/[^0-9]/g,''));
+              window.__kpiBaseMy = isFinite(nMy) && nMy > 0 ? nMy : 31230;
+            }
+            if(typeof window.__kpiBaseGlobal !== 'number'){
+              var tAll = (document.getElementById('kpi-all-count') && document.getElementById('kpi-all-count').textContent) || '1453456';
+              var nAll = Number(String(tAll).replace(/[^0-9]/g,''));
+              window.__kpiBaseGlobal = isFinite(nAll) && nAll > 0 ? nAll : 1453456;
+            }
+          }catch(e){
+            if(typeof window.__kpiBaseMy !== 'number') window.__kpiBaseMy = 31230;
+            if(typeof window.__kpiBaseGlobal !== 'number') window.__kpiBaseGlobal = 1453456;
+          }
 
-          // percent based on BASE plus added distribution counts (BASE + all distribution contributions)
-          var pct = ( (BASE + sumAllDist) / KPI ) * 100;
+          var BASE_MY = window.__kpiBaseMy;
+          var BASE_GLOBAL = window.__kpiBaseGlobal;
+
+          // 30-day rolling display:
+          // Malaysia shows: (BASE + older MY distributions) + (recent 30d MY distributions)
+          // After 30 days, "recent" merges into base automatically.
+          var now = Date.now();
+          var cutoff30 = now - (30 * 24 * 60 * 60 * 1000);
+
+          function isMalaysia(it){
+            var ctry = String(it.country||'').toLowerCase();
+            var loc = String(it.location||'').toLowerCase();
+            return (ctry.indexOf('malaysia') !== -1 || loc.indexOf('malaysia') !== -1);
+          }
+
+          var sumGlobalOlder = 0;
+          var sumGlobalRecent = 0;
+          var sumMyOlder = 0;
+          var sumMyRecent = 0;
+
+          (items || []).forEach(function(it){
+            try{
+              if(!isDistributionType(it.activity_type)) return;
+              var c = Number(it.count_number) || 0;
+              if(!isFinite(c) || c <= 0) return;
+              var ts = toTs(it.date);
+              if(!isFinite(ts)) ts = 0;
+              var isRecent = ts >= cutoff30;
+              if(isRecent) sumGlobalRecent += c; else sumGlobalOlder += c;
+              if(isMalaysia(it)){
+                if(isRecent) sumMyRecent += c; else sumMyOlder += c;
+              }
+            }catch(e){}
+          });
+
+          var myBaseDisplay = BASE_MY + sumMyOlder;
+          var myDeltaDisplay = sumMyRecent;
+          var myTotal = myBaseDisplay + myDeltaDisplay;
+
+          var globalTotal = BASE_GLOBAL + sumGlobalOlder + sumGlobalRecent;
+
+          // percent based on global progress (global total vs KPI target)
+          var pct = ( globalTotal / KPI ) * 100;
           if(!isFinite(pct)) pct = 0;
           pct = Math.max(0, Math.min(100, pct));
 
           // update dom
-          try{ var elLocal = document.getElementById('kpi-local-count'); if(elLocal) elLocal.textContent = formatNumber(localTotal); }catch(e){}
-          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(overallTotal) + '</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY ' + formatNumber(localTotal) + '</span>'; }catch(e){}
+          try{
+            var elLocal = document.getElementById('kpi-local-count');
+            if(elLocal){
+              if(myDeltaDisplay > 0){
+                elLocal.innerHTML = '<span class="kpi-base-num">' + formatNumber(myBaseDisplay) + '</span>'
+                  + '<span class="kpi-plus">+</span>'
+                  + '<span class="kpi-delta-num">' + formatNumber(myDeltaDisplay) + '</span>';
+              } else {
+                elLocal.textContent = formatNumber(myBaseDisplay);
+              }
+            }
+          }catch(e){}
+          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(globalTotal) + '</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY ' + formatNumber(myTotal) + '</span>'; }catch(e){}
           try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
           try{ var pi = document.getElementById('progressInner'); if(pi) {
               // apply new width (CSS transition will animate)
@@ -215,7 +273,7 @@
             } }catch(e){}
           try{ var pp = document.getElementById('progressPercent'); if(pp) pp.textContent = pct.toFixed(2) + '%'; }catch(e){}
           try{ var pt = document.getElementById('progressTarget'); if(pt) pt.textContent = formatNumber(KPI); }catch(e){}
-          try{ var months = computeMonthlyDistribution(items); renderSparkline(months); updateHeaderKpi(overallTotal, localTotal, pct); }catch(e){}
+          try{ var months = computeMonthlyDistribution(items); renderSparkline(months); updateHeaderKpi(globalTotal, myTotal, pct); }catch(e){}
         }catch(e){ console.warn('updateKpi error', e); }
       }
 
@@ -1573,6 +1631,9 @@
     padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; vertical-align:middle;
   }
   .kpi-all-num { font-weight:800; }
+  .kpi-base-num { font-weight:800; color:#f4f2ee; }
+  .kpi-plus { opacity:.75; margin:0 6px; }
+  .kpi-delta-num { font-weight:900; color:#ff6b6b; }
 
   /* Header KPI flash when updating */
   #siteHeaderMetrics .kpi-badge{ font-size:11px; padding:3px 7px; }
