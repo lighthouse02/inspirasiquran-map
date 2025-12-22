@@ -136,6 +136,28 @@ function pickBestHighlight(rows){
   return candidates[0] || '';
 }
 
+function formatBrandSignatureHtml(text){
+  const raw = String(text || '').trim();
+  if(!raw) return '';
+
+  // If user provides a URL, make it clickable.
+  if(/^https?:\/\//i.test(raw)){
+    const safeUrl = escapeHtml(raw);
+    return `<a href="${safeUrl}">${safeUrl}</a>`;
+  }
+
+  // If user provides a Telegram handle, link to t.me.
+  if(/^@[a-zA-Z0-9_]{5,}$/.test(raw)){
+    const username = raw.slice(1);
+    const safeLabel = escapeHtml(raw);
+    const safeUrl = escapeHtml(`https://t.me/${username}`);
+    return `<a href="${safeUrl}">${safeLabel}</a>`;
+  }
+
+  // Fallback: display as monospace label.
+  return `<code>${escapeHtml(raw)}</code>`;
+}
+
 function buildRecapHtml({ mission, dateLabel, activities, totalMushaf, topLocations, bestHighlight }){
   const DIV = '━━━━━━━━━━━━━━━━━━━━';
   const lines = [];
@@ -167,7 +189,8 @@ function buildRecapHtml({ mission, dateLabel, activities, totalMushaf, topLocati
 
   lines.push('');
   lines.push('');
-  lines.push(`<code>${escapeHtml(BRAND_SIGNATURE_TEXT)}</code>`);
+  const sig = formatBrandSignatureHtml(BRAND_SIGNATURE_TEXT);
+  if(sig) lines.push(sig);
 
   return lines.join('\n');
 }
