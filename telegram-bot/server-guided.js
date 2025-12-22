@@ -665,30 +665,104 @@ async function handleDeleteById(chatId, userId, id){
 }
 
 function makeId(){ return 'a-' + Math.random().toString(36).slice(2,10); }
-function safeDateISO(s){ const d = new Date(s); return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(); }
-// try to parse flexible user date inputs into an ISO string; return empty string if unknown
+// Optional: when users type date/time without timezone, interpret it using this offset (minutes) and convert to UTC.
+// Example for Malaysia (UTC+8): DATE_INPUT_TZ_OFFSET_MINUTES=480
+const DATE_INPUT_TZ_OFFSET_MINUTES = Number(process.env.DATE_INPUT_TZ_OFFSET_MINUTES || '0') || 0;
+
+function hasExplicitTimezone(raw){
+  const s = String(raw || '').trim();
+  if(!s) return false;
+  // ISO Z, ISO offsets, or explicit GMT/UTC marker
+  return /([zZ]|[+-]\d{2}:?\d{2}|\bUTC\b|\bGMT\b)/.test(s);
+}
+
+function isoFromPartsAssumingInputOffset(Y, Mo, D, hh, mm){
+  const utcMillis = Date.UTC(Y, Mo, D, hh || 0, mm || 0) - (DATE_INPUT_TZ_OFFSET_MINUTES * 60_000);
+  return new Date(utcMillis).toISOString();
+}
+
+function monthIndexFromName(name){
+  const n = String(name || '').trim().toLowerCase();
+  const map = {
+    jan: 0, january: 0,
+    feb: 1, february: 1,
+    mar: 2, march: 2,
+    apr: 3, april: 3,
+    may: 4,
+    jun: 5, june: 5,
+    jul: 6, july: 6,
+    aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11
+  };
+  return Object.prototype.hasOwnProperty.call(map, n) ? map[n] : -1;
+}
+
+function safeDateISO(s){
+  const raw = String(s || '').trim();
+  if(!raw) return new Date().toISOString();
+  const parsed = parseFlexibleDate(raw);
+  if(parsed) return parsed;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+// Try to parse flexible user date inputs into an ISO string; return empty string if unknown.
 function parseFlexibleDate(s){
   if(!s) return '';
   const t = String(s).trim().toLowerCase();
   if(t === 'now' || t === 'current' || t === 'current time' || t === 'today' || t === 'today now'){
     return new Date().toISOString();
   }
-  // direct parse
-  let d = new Date(s);
-  if(!isNaN(d.getTime())) return d.toISOString();
-  // try replace space with T and assume local time
-  try{
-    d = new Date(s.replace(' ', 'T'));
-    if(!isNaN(d.getTime())) return d.toISOString();
-  }catch(e){}
-  // try yyyy-mm-dd hh:mm
-  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
-  if(m){
-    const Y = Number(m[1]), Mo = Number(m[2])-1, D = Number(m[3]);
-    const hh = m[4]?Number(m[4]):0, mm = m[5]?Number(m[5]):0;
-    d = new Date(Date.UTC(Y,Mo,D,hh,mm));
-    if(!isNaN(d.getTime())) return d.toISOString();
+
+  // If timezone is explicit, trust native parsing.
+  if(hasExplicitTimezone(s)){
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
   }
+
+  // yyyy-mm-dd[ hh:mm]
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?$/);
+  if(m){
+    const Y = Number(m[1]), Mo = Number(m[2]) - 1, D = Number(m[3]);
+    const hh = m[4] ? Number(m[4]) : 0;
+    const mm = m[5] ? Number(m[5]) : 0;
+    return isoFromPartsAssumingInputOffset(Y, Mo, D, hh, mm);
+  }
+
+  // dd Mon yyyy[ hh:mm] (e.g. "1 Dec 2025 02:40")
+  m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if(m){
+    const D = Number(m[1]);
+    const Mo = monthIndexFromName(m[2]);
+    const Y = Number(m[3]);
+    const hh = m[4] ? Number(m[4]) : 0;
+    const mm = m[5] ? Number(m[5]) : 0;
+    if(Mo >= 0) return isoFromPartsAssumingInputOffset(Y, Mo, D, hh, mm);
+  }
+
+  // Mon dd yyyy[ hh:mm] (e.g. "Dec 1 2025 02:40")
+  m = s.match(/^([A-Za-z]{3,9})\s+(\d{1,2})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if(m){
+    const Mo = monthIndexFromName(m[1]);
+    const D = Number(m[2]);
+    const Y = Number(m[3]);
+    const hh = m[4] ? Number(m[4]) : 0;
+    const mm = m[5] ? Number(m[5]) : 0;
+    if(Mo >= 0) return isoFromPartsAssumingInputOffset(Y, Mo, D, hh, mm);
+  }
+
+  // Fallback: try native parsing but interpret as "input timezone".
+  // Example: "2025-12-21 19:40" might parse differently across runtimes;
+  // if it parses, re-build from its date parts in the input offset.
+  try{
+    const d = new Date(s);
+    if(!isNaN(d.getTime())){
+      return isoFromPartsAssumingInputOffset(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes());
+    }
+  }catch(e){}
   return '';
 }
 
