@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server-guided.js",
     "recap:daily": "node recap-daily.js",
-    "recap:scheduler": "node recap-scheduler.js"
+    "recap:scheduler": "node recap-scheduler.js",
+    "backfill:activities": "node scripts/backfill-activities-derived-fields.js"
   },
   "author": "",
   "license": "MIT",

@@ -580,24 +580,38 @@ function recapApprovalKeyboard(recapId){
 async function insertActivityToDb(item){
   const pool = getDbPool();
   if(!pool) throw new Error('DB is not configured');
-  const sql = `INSERT INTO activities(
-      title, note, activity_date, count, location, latitude, longitude, attachment_url, attachment_type, raw
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    RETURNING id`;
-  const vals = [
-    item.title || 'Activity',
-    item.note || null,
-    item.date ? new Date(item.date).toISOString() : null,
-    item.count == null ? null : String(item.count),
-    item.location || null,
-    (typeof item.lat === 'number') ? item.lat : null,
-    (typeof item.lng === 'number') ? item.lng : null,
-    // Only store an attachment URL if it is already a public URL (http/https).
-    (item.attachment && item.attachment.webPath && /^https?:\/\//i.test(String(item.attachment.webPath))) ? String(item.attachment.webPath) : null,
-    (item.attachment && item.attachment.type) ? String(item.attachment.type) : null,
-    item ? JSON.stringify(item) : null
+  const cols = await getActivitiesTableColumns(pool);
+  const hasCountNumberCol = cols.has('count_number');
+  const hasMissionCol = cols.has('mission');
+  const hasActivityTypeCol = cols.has('activity_type');
+
+  const rawItem = ensureDerivedActivityFields(item);
+
+  const columns = ['title', 'note', 'activity_date', 'count'];
+  const values = [
+    rawItem.title || 'Activity',
+    rawItem.note || null,
+    rawItem.date ? new Date(rawItem.date).toISOString() : null,
+    rawItem.count == null ? null : String(rawItem.count)
   ];
-  const r = await pool.query(sql, vals);
+  if(hasCountNumberCol){ columns.push('count_number'); values.push(rawItem.count_number == null ? null : Number(rawItem.count_number)); }
+  if(hasMissionCol){ columns.push('mission'); values.push(rawItem.mission || null); }
+  if(hasActivityTypeCol){ columns.push('activity_type'); values.push(rawItem.activity_type || null); }
+
+  columns.push('location', 'latitude', 'longitude', 'attachment_url', 'attachment_type', 'raw');
+  values.push(
+    rawItem.location || null,
+    (typeof rawItem.lat === 'number') ? rawItem.lat : null,
+    (typeof rawItem.lng === 'number') ? rawItem.lng : null,
+    // Only store an attachment URL if it is already a public URL (http/https).
+    (rawItem.attachment && rawItem.attachment.webPath && /^https?:\/\//i.test(String(rawItem.attachment.webPath))) ? String(rawItem.attachment.webPath) : null,
+    (rawItem.attachment && rawItem.attachment.type) ? String(rawItem.attachment.type) : null,
+    rawItem ? JSON.stringify(rawItem) : null
+  );
+
+  const placeholders = values.map((_, i) => '$' + (i + 1)).join(',');
+  const sql = `INSERT INTO activities(${columns.join(', ')}) VALUES (${placeholders}) RETURNING id`;
+  const r = await pool.query(sql, values);
   return r.rows && r.rows[0] ? r.rows[0].id : null;
 }
 
@@ -636,33 +650,36 @@ async function getActivityFromDbById(id){
 async function updateActivityInDb(id, item){
   const pool = getDbPool();
   if(!pool) throw new Error('DB is not configured');
-  const sql = `UPDATE activities SET
-      title = $2,
-      note = $3,
-      activity_date = $4,
-      count = $5,
-      location = $6,
-      latitude = $7,
-      longitude = $8,
-      attachment_url = $9,
-      attachment_type = $10,
-      raw = $11
-    WHERE id = $1
-    RETURNING id`;
-  const vals = [
-    id,
-    item.title || 'Activity',
-    item.note || null,
-    item.date ? new Date(item.date).toISOString() : null,
-    item.count == null ? null : String(item.count),
-    item.location || null,
-    (typeof item.lat === 'number') ? item.lat : null,
-    (typeof item.lng === 'number') ? item.lng : null,
-    (item.attachment && item.attachment.webPath && /^https?:\/\//i.test(String(item.attachment.webPath))) ? String(item.attachment.webPath) : (item.attachment_url || null),
-    (item.attachment && item.attachment.type) ? String(item.attachment.type) : (item.attachment_type || null),
-    item ? JSON.stringify(item) : null
-  ];
-  const r = await pool.query(sql, vals);
+  const cols = await getActivitiesTableColumns(pool);
+  const hasCountNumberCol = cols.has('count_number');
+  const hasMissionCol = cols.has('mission');
+  const hasActivityTypeCol = cols.has('activity_type');
+
+  const rawItem = ensureDerivedActivityFields(item);
+
+  const assignments = [];
+  const values = [id];
+  function add(col, val){
+    assignments.push(`${col} = $${values.length + 1}`);
+    values.push(val);
+  }
+
+  add('title', rawItem.title || 'Activity');
+  add('note', rawItem.note || null);
+  add('activity_date', rawItem.date ? new Date(rawItem.date).toISOString() : null);
+  add('count', rawItem.count == null ? null : String(rawItem.count));
+  if(hasCountNumberCol) add('count_number', rawItem.count_number == null ? null : Number(rawItem.count_number));
+  if(hasMissionCol) add('mission', rawItem.mission || null);
+  if(hasActivityTypeCol) add('activity_type', rawItem.activity_type || null);
+  add('location', rawItem.location || null);
+  add('latitude', (typeof rawItem.lat === 'number') ? rawItem.lat : null);
+  add('longitude', (typeof rawItem.lng === 'number') ? rawItem.lng : null);
+  add('attachment_url', (rawItem.attachment && rawItem.attachment.webPath && /^https?:\/\//i.test(String(rawItem.attachment.webPath))) ? String(rawItem.attachment.webPath) : (rawItem.attachment_url || null));
+  add('attachment_type', (rawItem.attachment && rawItem.attachment.type) ? String(rawItem.attachment.type) : (rawItem.attachment_type || null));
+  add('raw', rawItem ? JSON.stringify(rawItem) : null);
+
+  const sql = `UPDATE activities SET ${assignments.join(', ')} WHERE id = $1 RETURNING id`;
+  const r = await pool.query(sql, values);
   return r.rows && r.rows[0] ? r.rows[0].id : null;
 }
 
@@ -1038,6 +1055,45 @@ function parseCountInput(raw){
   return t;
 }
 
+function parseCountNumberLoose(value){
+  if(value == null) return null;
+  if(typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+  const t = String(value || '').trim();
+  if(!t) return null;
+  // match first number-ish token, tolerate commas/spaces/underscores
+  const m = t.match(/\d[\d,._\s]*/);
+  if(!m) return null;
+  const numStr = m[0].replace(/[^\d]/g, '');
+  if(!numStr) return null;
+  const n = Number(numStr);
+  if(!Number.isFinite(n)) return null;
+  return Math.round(n);
+}
+
+function ensureDerivedActivityFields(item){
+  const next = Object.assign({}, item || {});
+  // Always keep mission/activity_type mirrored in raw for later parsing.
+  next.mission = next.mission == null ? '' : String(next.mission);
+  next.activity_type = next.activity_type == null ? '' : String(next.activity_type);
+
+  // Derive numeric count for aggregations (especially for distribution).
+  // Keep `count` as-is (string or number) for display, but store `count_number` as integer when detectable.
+  const countNum = parseCountNumberLoose(next.count);
+  next.count_number = (countNum == null) ? null : countNum;
+  return next;
+}
+
+let _activitiesTableColumnsCache = null;
+async function getActivitiesTableColumns(pool){
+  if(_activitiesTableColumnsCache) return _activitiesTableColumnsCache;
+  const res = await pool.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'activities'"
+  );
+  const set = new Set((res.rows || []).map(r => String(r.column_name || '').trim()).filter(Boolean));
+  _activitiesTableColumnsCache = set;
+  return set;
+}
+
 async function sendPreview(chatId, s){
   const item = {
     id: s.data.id || makeId(),
@@ -1046,6 +1102,7 @@ async function sendPreview(chatId, s){
     activity_type: s.data.activity_type,
     date: safeDateISO(s.data.date),
     count: s.data.count,
+    count_number: parseCountNumberLoose(s.data.count),
     location: s.data.location,
     lat: s.data.lat,
     lng: s.data.lng,

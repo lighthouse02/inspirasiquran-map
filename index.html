@@ -291,6 +291,76 @@
 
       function toTs(d){ return (d instanceof Date) ? d.getTime() : (isNaN(Date.parse(d)) ? null : Date.parse(d)); }
 
+      function parseCountNumberLoose(value){
+        if(value == null) return null;
+        if(typeof value === 'number' && isFinite(value)) return Math.round(value);
+        var t = String(value || '').trim();
+        if(!t) return null;
+        var m = t.match(/\d[\d,._\s]*/);
+        if(!m) return null;
+        var numStr = m[0].replace(/[^\d]/g, '');
+        if(!numStr) return null;
+        var n = Number(numStr);
+        if(!isFinite(n)) return null;
+        return Math.round(n);
+      }
+
+      function isDistributionType(type){
+        var t = String(type || '').trim().toLowerCase();
+        if(!t) return false;
+        return t === 'distribution' || /\bdistribution\b/.test(t);
+      }
+
+      function formatNumber(n){
+        try{ return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n); }catch(e){ return String(n); }
+      }
+
+      function renderDistributionTable(items){
+        var tbody = document.getElementById('impactTableBody') || (document.querySelector('#impactTable tbody'));
+        if(!tbody) return;
+
+        var now = Date.now();
+        var cutoff = now - (30 * 24 * 60 * 60 * 1000);
+
+        var buckets = {}; // key -> { mission, location, total, delta30 }
+        for(var i=0;i<items.length;i++){
+          var it = items[i];
+          if(!isDistributionType(it.activity_type)) continue;
+          var c = (it.count_number != null) ? Number(it.count_number) : parseCountNumberLoose(it.count);
+          if(!isFinite(c) || c <= 0) continue;
+
+          var mission = String(it.mission || '').trim();
+          var place = String(it.location || '').trim();
+
+          var key = (mission || '—') + '||' + (place || '—');
+          if(!buckets[key]) buckets[key] = { mission: (mission || '—'), location: (place || '—'), total: 0, delta30: 0 };
+          buckets[key].total += c;
+          var ts = (it.date instanceof Date) ? it.date.getTime() : Date.parse(it.date);
+          if(isFinite(ts) && ts >= cutoff) buckets[key].delta30 += c;
+        }
+
+        var rows = Object.keys(buckets).map(function(k){ return buckets[k]; });
+        rows.sort(function(a,b){
+          if(b.total !== a.total) return b.total - a.total;
+          return String(a.mission).localeCompare(String(b.mission));
+        });
+
+        if(!rows.length){
+          tbody.innerHTML = '<tr><td class="placeholder" colspan="4">—</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(function(r){
+          var delta = r.delta30 > 0 ? ('<span class="delta">+' + escapeHtml(formatNumber(r.delta30)) + '</span>') : '';
+          return '<tr>'
+            + '<td>' + escapeHtml(r.mission) + '</td>'
+            + '<td>' + escapeHtml(r.location) + '</td>'
+            + '<td class="num">' + escapeHtml(formatNumber(r.total)) + '</td>'
+            + '<td class="num">' + delta + '</td>'
+            + '</tr>';
+        }).join('');
+      }
+
       async function load(){
         try{
           console.log('Activities: fetching', ACTIVITIES_URL);
@@ -462,6 +532,7 @@
           title: it.title || it.note || 'Activity',
           date: (it.date ? new Date(it.date) : (it.created_at ? new Date(it.created_at) : new Date())),
           count: it.count || it.mushaf || null,
+          count_number: (it.count_number != null) ? Number(it.count_number) : parseCountNumberLoose(it.count || it.mushaf || null),
           activity_type: it.activity_type || it.type || '',
           mission: it.mission || '',
           location: it.location || '',
@@ -471,6 +542,9 @@
           note: it.note || '',
           highlights: it.highlights || ''
         })).sort((a,b)=> a.date - b.date);
+
+        // Keep the dashboard table in sync with the latest feed.
+        try{ renderDistributionTable(items); }catch(e){ console.warn('Impact table render failed', e); }
 
         // update page header last-updated using newest activity timestamp
         try{
@@ -1178,25 +1252,25 @@
   .tbl tbody tr:nth-child(even) td { background: var(--rowAlt); }
   .tbl .num { text-align:right; font-variant-numeric: tabular-nums; }
 
+  .tbl .delta { color:#ff6b6b; font-weight:800; }
+
   /* NEW: style blanks */
   .tbl td.placeholder { color:#888; font-style:italic; }
 </style>
 
 <div class="dash-wrap">
-  <div class="dash-title">Project Locations</div>
+  <div class="dash-title">Quran Distribution (by Mission & Location)</div>
   <div class="table-wrap">
     <table class="tbl" id="impactTable">
       <thead>
         <tr>
-          <th>Impact</th>
-          <th>Place</th>
-          <th>Benefitors</th>
-          <th class="num">Total Qur'an</th>
+          <th>Mission</th>
+          <th>Location</th>
+          <th class="num">Total</th>
+          <th class="num">Last 30d</th>
         </tr>
       </thead>
-      <tbody>
-        <tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Tanzania</td><td>Chaani, Shangani, Potoa, Kidoti</td><td class="num">8,680</td></tr><tr class=''><td><span class="chip " style="--chip:#ff6b6b">High Impact</span></td><td>Chad</td><td class="placeholder">—</td><td class="num">5,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Djibouti</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Niger</td><td class="placeholder">—</td><td class="num">4,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Dar Es Salaam, Pulau Zanzibar</td><td class="num">3,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Cameroon</td><td>Kousseri, Youndi</td><td class="num">2,000</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Sarajevo, Bosnia</td><td>Masjid Ship, Masjid Jezero, Masjid Sedrenik</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Tanzania</td><td>Ilala, Temeke</td><td class="num">1,650</td></tr><tr class=''><td><span class="chip " style="--chip:#ffaa3b">Moderate</span></td><td>Ethiopia</td><td>Adama, Odomia</td><td class="num">1,000</td></tr><tr class='active-row'><td><span class="chip chip--active" style="--chip:#ff6b6b">Active</span></td><td><span class="pulse-dot" title="Launch: 22 Dec 2025"></span>Ouagadougou, Burkina Faso</td><td>Madrasah Izharuddin, Kombissiri</td><td class="num">8,000</td></tr>
-      </tbody>
+      <tbody id="impactTableBody"></tbody>
     </table>
   </div>
 </div>
