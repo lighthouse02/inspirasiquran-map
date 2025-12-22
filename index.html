@@ -89,13 +89,19 @@
       <span id="siteLastUpdated" style="opacity:.6;font-weight:400;font-size:12px;margin-left:10px;">Last updated: auto</span>
     </div>
     <div style="flex:1"></div>
-    <div style="display:flex;gap:22px;">
-      <div><div style="opacity:.6;font-size:11px;">Total Qur'an</div>
-           <div style="font-size:18px;font-weight:700;">31,230</div></div>
-      <div><div style="opacity:.6;font-size:11px;">Projects</div>
-           <div style="font-size:18px;font-weight:700;">10</div></div>
-      <div><div style="opacity:.6;font-size:11px;">Countries</div>
-           <div style="font-size:18px;font-weight:700;">8</div></div>
+    <div id="siteHeaderMetrics" style="display:flex;gap:22px;align-items:baseline;">
+      <div>
+        <div style="opacity:.6;font-size:11px;">Total Qur'an</div>
+        <div id="header-total" style="font-size:18px;font-weight:700;">31,230</div>
+      </div>
+      <div>
+        <div style="opacity:.6;font-size:11px;">Projects</div>
+        <div id="header-projects" style="font-size:18px;font-weight:700;">10</div>
+      </div>
+      <div>
+        <div style="opacity:.6;font-size:11px;">Countries</div>
+        <div id="header-countries" style="font-size:18px;font-weight:700;">8</div>
+      </div>
     </div>
   </div>
 </div>
@@ -208,8 +214,27 @@
             } }catch(e){}
           try{ var pp = document.getElementById('progressPercent'); if(pp) pp.textContent = pct.toFixed(2) + '%'; }catch(e){}
           try{ var pt = document.getElementById('progressTarget'); if(pt) pt.textContent = formatNumber(KPI); }catch(e){}
-          try{ var months = computeMonthlyDistribution(items); renderSparkline(months); }catch(e){}
+          try{ var months = computeMonthlyDistribution(items); renderSparkline(months); updateHeaderKpi(overallTotal, localTotal, pct); }catch(e){}
         }catch(e){ console.warn('updateKpi error', e); }
+      }
+
+      function updateHeaderKpi(overall, local, pct){
+        try{
+          var el = document.getElementById('header-total');
+          if(el) el.innerHTML = '<span class="kpi-all-num">'+formatNumber(overall)+'</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY '+formatNumber(local)+'</span>';
+          // optional small pct next to header total
+          var headerPct = document.getElementById('header-kpi-pct');
+          if(!headerPct){
+            var container = document.getElementById('header-total');
+            if(container){
+              var s = document.createElement('div'); s.id = 'header-kpi-pct'; s.style.opacity = '.7'; s.style.fontSize = '12px'; s.style.marginTop = '2px'; s.textContent = pct.toFixed(1) + '%'; container.parentElement.appendChild(s);
+            }
+          } else {
+            headerPct.textContent = pct.toFixed(1) + '%';
+          }
+          var metrics = document.getElementById('siteHeaderMetrics');
+          if(metrics){ metrics.classList.remove('header-kpi-flash'); void metrics.offsetWidth; metrics.classList.add('header-kpi-flash'); setTimeout(function(){ try{ metrics.classList.remove('header-kpi-flash'); }catch(e){} }, 1000); }
+        }catch(e){ console.warn('updateHeaderKpi failed', e); }
       }
       
         function renderSparkline(monthly){
@@ -1569,6 +1594,11 @@
     padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; vertical-align:middle;
   }
   .kpi-all-num { font-weight:800; }
+
+  /* Header KPI flash when updating */
+  #siteHeaderMetrics .kpi-badge{ font-size:11px; padding:3px 7px; }
+  .header-kpi-flash{ animation: headerFlash 900ms ease; }
+  @keyframes headerFlash{ 0%{ transform:scale(1); opacity:0.8 } 50%{ transform:scale(1.06); opacity:1 } 100%{ transform:scale(1); opacity:0.95 } }
 
   .progress-outer {
     width:100%; height:16px; 
