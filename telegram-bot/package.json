@@ -4,7 +4,8 @@
   "description": "Telegram bot to update activities.json for InspirasiQuran map",
   "main": "server-guided.js",
   "scripts": {
-    "start": "node server-guided.js"
+    "start": "node server-guided.js",
+    "recap:daily": "node recap-daily.js"
   },
   "author": "",
   "license": "MIT",

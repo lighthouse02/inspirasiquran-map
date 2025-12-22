@@ -49,3 +49,59 @@ node server-guided.js
 ```
 
 This mode downloads attachments to `telegram-bot/uploads` and stores attachment metadata in `activities.json`.
+
+Daily Recap (Railway Cron)
+-------------------------
+
+There is a one-shot script that generates a daily recap draft and sends it for approval:
+
+- Script: `recap-daily.js`
+- Run locally: `npm run recap:daily`
+
+It is designed to be run by a scheduler (recommended: Railway Cron) and **does not use polling**, so it won’t create Telegram 409 conflicts.
+
+Approval flow
+
+- Cron job creates a `recap_posts` row with `status='pending'` and sends the draft to an approver chat with buttons.
+- Your always-on bot service (`server-guided.js`) receives the button callbacks:
+  - Approve ✅ → posts to `TELEGRAM_CHANNEL_ID`
+  - Edit ✏️ → lets you send a replacement text, then you can approve
+  - Cancel ❌ → marks canceled
+
+Required environment variables
+
+- `DATABASE_URL` (or `NETLIFY_DATABASE_URL`)
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHANNEL_ID` (e.g. `-100xxxxxxxxxx`)
+- `RECAP_APPROVER_CHAT_ID` (your personal chat id, or a private admin group id)
+
+Optional environment variables
+
+- `RECAP_MISSION` (default `Syria`)
+- `RECAP_TZ_OFFSET_MINUTES` (default `480` for Malaysia UTC+8)
+- `RECAP_POST_EMPTY` (default `false`) — if `true`, posts even when there are no matching activities
+- `BRAND_SIGNATURE_TEXT` (default `@inspirasiquranlive`)
+
+Railway setup (recommended)
+
+1. Create a **new Railway Cron Job** in the same project (separate from the polling bot service).
+2. Set the start command to run from the `telegram-bot` folder:
+
+  - Command: `cd telegram-bot && npm run recap:daily`
+
+3. Set the schedule.
+
+  Railway cron schedules are typically interpreted as UTC.
+  - 10:00pm Malaysia time (MYT, UTC+8) = 14:00 UTC
+  - Cron example: `0 14 * * *`
+
+4. Add the required environment variables to the Cron Job.
+
+5. Ensure your main bot service (`server-guided.js`) is running continuously (replicas=1) so it can handle Approve/Edit/Cancel button callbacks.
+
+Notes
+
+- The recap currently filters activities by:
+  - Mission text in note/raw like "Misi Syria" or "Mission Syria".
+  - `raw.activity_type === "distribution"`.
+  If you want it to work for older records that don’t have `activity_type`, we can add a fallback.

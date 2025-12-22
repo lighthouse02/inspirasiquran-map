@@ -463,6 +463,7 @@
           date: (it.date ? new Date(it.date) : (it.created_at ? new Date(it.created_at) : new Date())),
           count: it.count || it.mushaf || null,
           activity_type: it.activity_type || it.type || '',
+          mission: it.mission || '',
           location: it.location || '',
           lat: (typeof it.lat==='number')?it.lat:(it.latitude||null),
           lng: (typeof it.lng==='number')?it.lng:(it.longitude||null),
@@ -749,10 +750,12 @@
             const popupLoc = escapeHtml(it.location || '');
             const popupNote = escapeHtml(it.note || '');
             const popupCount = (it.count ? escapeHtml(String(it.count) + ' Mushaf') : '');
+            const popupMission = String(it.mission || '').trim();
             const popupHighlights = String(it.highlights || '').trim();
+            const missionHtml = popupMission ? `<div style="margin-top:4px;opacity:.9;font-size:13px"><span style="font-weight:800">🎯 Mission</span> ${escapeHtml(popupMission)}</div>` : '';
             const highlightsTextHtml = popupHighlights ? escapeHtml(popupHighlights).replace(/\r?\n/g,'<br>') : '';
             const highlightsHtml = popupHighlights ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font-weight:800">💬 Highlights</div><div style="opacity:.95;margin-top:6px;font-style:italic">“${highlightsTextHtml}”</div></div>` : '';
-            m.bindPopup(`<div style="color:#f4f2ee"><b>${popupTitle}</b><div style="opacity:.8;font-size:13px">${popupLoc}</div>${popupNote?`<div style="margin-top:6px">${popupNote}</div>`:''}${highlightsHtml}${popupCount?`<div style="margin-top:8px;font-weight:700">${popupCount}</div>`:''}</div>`);
+            m.bindPopup(`<div style="color:#f4f2ee"><b>${popupTitle}</b><div style="opacity:.8;font-size:13px">${popupLoc}</div>${missionHtml}${popupNote?`<div style="margin-top:6px">${popupNote}</div>`:''}${highlightsHtml}${popupCount?`<div style="margin-top:8px;font-weight:700">${popupCount}</div>`:''}</div>`);
             m._ts = it.date.getTime();
             markersById[it.id] = m;
           }

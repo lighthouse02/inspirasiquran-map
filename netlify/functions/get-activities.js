@@ -51,13 +51,15 @@ exports.handler = async function(event) {
 
       const highlights = rawObj && (rawObj.highlights || rawObj.highlight) ? String(rawObj.highlights || rawObj.highlight) : '';
       const activity_type = rawObj && rawObj.activity_type ? String(rawObj.activity_type) : '';
+      const mission = rawObj && rawObj.mission ? String(rawObj.mission) : '';
 
       // Do not return raw by default (keeps payload small), only derived fields.
       const { raw, ...rest } = r;
       return {
         ...rest,
         activity_type,
-        highlights: highlights || ''
+        highlights: highlights || '',
+        mission: mission || ''
       };
     });
     return {

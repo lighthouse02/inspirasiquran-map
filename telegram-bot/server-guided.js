@@ -82,7 +82,67 @@ if(!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 // Used for menu-driven edit/delete prompts (when user taps buttons instead of typing commands).
 const pendingMenuActionByChatId = Object.create(null);
 
+// Used for editing recap drafts (daily recap approval workflow).
+// chatId -> { recapId }
+const recapEditByChatId = Object.create(null);
+
 const RECENT_LIST_PAGE_SIZE = 6;
+
+const DEFAULT_MISSIONS = [
+  'Syria',
+  'Quran',
+  'Kurban',
+  'Telaga',
+  'Palestin',
+  'Hot Meals',
+  'Iftar'
+];
+
+let _missionOptionsCache = { at: 0, list: DEFAULT_MISSIONS.slice() };
+
+async function getMissionOptions(){
+  // Cache for 5 minutes to avoid spamming DB.
+  const now = Date.now();
+  if(_missionOptionsCache.list && (now - _missionOptionsCache.at) < 5 * 60 * 1000) return _missionOptionsCache.list;
+
+  // If DB isn't enabled, fall back.
+  if(!dbEnabled()){
+    _missionOptionsCache = { at: now, list: DEFAULT_MISSIONS.slice() };
+    return _missionOptionsCache.list;
+  }
+
+  try{
+    const pool = getDbPool();
+    // mission_options table may not exist yet; catch errors and fallback.
+    const q = `SELECT name FROM mission_options WHERE active = true ORDER BY sort_order NULLS LAST, name ASC`;
+    const r = await pool.query(q);
+    const list = (r.rows || []).map(x => String(x.name || '').trim()).filter(Boolean);
+    _missionOptionsCache = { at: now, list: list.length ? list : DEFAULT_MISSIONS.slice() };
+    return _missionOptionsCache.list;
+  }catch(e){
+    _missionOptionsCache = { at: now, list: DEFAULT_MISSIONS.slice() };
+    return _missionOptionsCache.list;
+  }
+}
+
+function normalizeMission(raw){
+  return String(raw || '').trim();
+}
+
+function missionKeyboard(options){
+  const list = (options && options.length) ? options : DEFAULT_MISSIONS;
+  const rows = [];
+  for(let i=0;i<list.length;i+=2){
+    const a = list[i];
+    const b = list[i+1];
+    const row = [];
+    if(a) row.push({ text: a, callback_data: `_set_mission:${encodeURIComponent(String(a))}` });
+    if(b) row.push({ text: b, callback_data: `_set_mission:${encodeURIComponent(String(b))}` });
+    rows.push(row);
+  }
+  rows.push([{ text: '✍️ Other (type manually)', callback_data: '_set_mission:__manual__' }]);
+  return { inline_keyboard: rows };
+}
 
 // Register commands so Telegram shows them in the bot UI menu.
 try{
@@ -454,6 +514,57 @@ function getDbPool(){
   return _dbPool;
 }
 
+async function getRecapPostById(id){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  if(!isUuidLike(id)) throw new Error('Invalid recap id');
+  const q = `SELECT id, status, draft_html, preview_chat_id, preview_message_id
+             FROM recap_posts
+             WHERE id = $1`;
+  const r = await pool.query(q, [id]);
+  return (r.rows && r.rows[0]) ? r.rows[0] : null;
+}
+
+async function updateRecapDraftHtml(id, draftHtml){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  if(!isUuidLike(id)) throw new Error('Invalid recap id');
+  await pool.query(
+    'UPDATE recap_posts SET draft_html = $2 WHERE id = $1',
+    [id, String(draftHtml || '')]
+  );
+}
+
+async function markRecapCanceled(id){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  if(!isUuidLike(id)) throw new Error('Invalid recap id');
+  await pool.query(
+    "UPDATE recap_posts SET status = 'canceled' WHERE id = $1",
+    [id]
+  );
+}
+
+async function markRecapPosted(id, postedChatId, postedMessageId){
+  const pool = getDbPool();
+  if(!pool) throw new Error('DB is not configured');
+  if(!isUuidLike(id)) throw new Error('Invalid recap id');
+  await pool.query(
+    "UPDATE recap_posts SET status = 'posted', posted_chat_id = $2, posted_message_id = $3, posted_at = now() WHERE id = $1",
+    [id, String(postedChatId || ''), postedMessageId == null ? null : Number(postedMessageId)]
+  );
+}
+
+function recapApprovalKeyboard(recapId){
+  return {
+    inline_keyboard: [[
+      { text: 'Approve ✅', callback_data: `_recap_approve:${recapId}` },
+      { text: 'Edit ✏️', callback_data: `_recap_edit:${recapId}` },
+      { text: 'Cancel ❌', callback_data: `_recap_cancel:${recapId}` }
+    ]]
+  };
+}
+
 async function insertActivityToDb(item){
   const pool = getDbPool();
   if(!pool) throw new Error('DB is not configured');
@@ -580,8 +691,8 @@ function saveActivities(arr){ fs.writeFileSync(ACTIVITIES_PATH, JSON.stringify(a
 function isAllowed(userId){ if(ALLOWED.length===0) return true; return ALLOWED.includes(userId); }
 
 function getHelpText(){
-  return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/cancel - cancel guided input\n
-During /new you can also set an activity type (transit/arrival/distribution/class/completion) to make channel posts prettier. You can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
+  return `/menu - show buttons\n/new - guided input\n/back - go to previous step (during /new or /edit)\n/skip - skip current step\n/edit <id> - edit an existing activity\n/delete <id> - delete an activity\n/add title | ISO-date | count | location | lat lng | note - quick add\n/list - recent (shows IDs)\n/missions - list mission categories\n/mission_add <name> - add a new mission category\n/cancel - cancel guided input\n
+During /new you will be asked for a mission category and an activity type (transit/arrival/distribution/class/completion). You can share location via Telegram or type a location (e.g. Kuala Lumpur, Malaysia), and attach a photo or document. Date examples: now, 2025-12-20, 2025-12-20 14:30, Dec 20 2025.`;
 }
 
 async function sendRecentList(chatId){
@@ -919,6 +1030,7 @@ async function sendPreview(chatId, s){
   const item = {
     id: s.data.id || makeId(),
     title: s.data.title,
+    mission: s.data.mission,
     activity_type: s.data.activity_type,
     date: safeDateISO(s.data.date),
     count: s.data.count,
@@ -954,6 +1066,11 @@ async function handleSkip(chatId, s){
   if(!s) return;
   if(isEditMenuMode(s)){
     s.step = 'edit_menu';
+    return promptForStep(chatId, s);
+  }
+  if(s.step === 'mission'){
+    if(s.mode !== 'edit') s.data.mission = '';
+    s.step = 'type';
     return promptForStep(chatId, s);
   }
   if(s.step === 'type'){
@@ -1021,7 +1138,8 @@ function stepPrev(step){
     location: 'count',
     count: 'date',
     date: 'type',
-    type: 'title'
+    type: 'mission',
+    mission: 'title'
   };
   return map[step] || '';
 }
@@ -1040,6 +1158,7 @@ async function promptForStep(chatId, s){
   const mode = s.mode || 'create';
   if(s.step === 'edit_menu'){
     const title = s.data.title || '';
+    const missionText = s.data.mission || '';
     const typeText = s.data.activity_type || '';
     const dateText = s.data.date ? formatDateUTC(s.data.date) : (s.data.dateRaw || '');
     const countText = (s.data.count == null) ? '' : String(s.data.count);
@@ -1051,6 +1170,7 @@ async function promptForStep(chatId, s){
     const summary =
       `Editing activity:\n` +
       `• Title: ${title || '(empty)'}\n` +
+      `• Mission: ${missionText || '(empty)'}\n` +
       `• Type: ${typeText || '(empty)'}\n` +
       `• Date: ${dateText || '(empty)'}\n` +
       `• Count: ${countText || '(empty)'}\n` +
@@ -1062,9 +1182,9 @@ async function promptForStep(chatId, s){
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Type', callback_data: '_edit_field_type' }, { text: 'Date', callback_data: '_edit_field_date' }],
-        [{ text: 'Count', callback_data: '_edit_field_count' }, { text: 'Location', callback_data: '_edit_field_location' }, { text: 'Attachment', callback_data: '_edit_field_attachment' }],
-        [{ text: 'Note', callback_data: '_edit_field_note' }, { text: 'Highlights', callback_data: '_edit_field_highlights' }],
+        [{ text: 'Title', callback_data: '_edit_field_title' }, { text: 'Mission', callback_data: '_edit_field_mission' }, { text: 'Type', callback_data: '_edit_field_type' }],
+        [{ text: 'Date', callback_data: '_edit_field_date' }, { text: 'Count', callback_data: '_edit_field_count' }, { text: 'Location', callback_data: '_edit_field_location' }],
+        [{ text: 'Attachment', callback_data: '_edit_field_attachment' }, { text: 'Note', callback_data: '_edit_field_note' }, { text: 'Highlights', callback_data: '_edit_field_highlights' }],
         [{ text: 'Preview / Confirm', callback_data: '_edit_preview' }],
         [{ text: 'Edit all (guided)', callback_data: '_edit_all' }, { text: 'Cancel', callback_data: '_edit_cancel' }]
       ]
@@ -1077,6 +1197,14 @@ async function promptForStep(chatId, s){
       ? `Editing activity. Current title: ${cur ? '"' + cur + '"' : '(empty)'}\nSend new title (or /skip to keep).`
       : "Let's create a new activity. What is the title? (e.g. 'Quran distribution — Village X')";
     return bot.sendMessage(chatId, msg, { reply_markup:{ force_reply:true } });
+  }
+  if(s.step === 'mission'){
+    const cur = s.data.mission || '';
+    const msg = (mode === 'edit')
+      ? `Current mission: ${cur || '(empty)'}\nChoose a mission below, or type it manually, or /skip to keep.`
+      : 'Mission category (for recap + reporting). Choose one:';
+    const opts = await getMissionOptions();
+    return bot.sendMessage(chatId, msg, { reply_markup: missionKeyboard(opts) });
   }
   if(s.step === 'type'){
     const cur = s.data.activity_type || '';
@@ -1169,6 +1297,7 @@ async function beginEditFlow(msg, id){
         const rawObj = (typeof existing.raw === 'string') ? JSON.parse(existing.raw) : existing.raw;
         if(rawObj && rawObj.activity_type) s.data.activity_type = String(rawObj.activity_type);
         if(rawObj && rawObj.highlights) s.data.highlights = String(rawObj.highlights);
+        if(rawObj && rawObj.mission) s.data.mission = String(rawObj.mission);
       }
     }catch(e){ /* ignore */ }
     s.data.date = existing.date ? safeDateISO(existing.date) : (existing.activity_date ? safeDateISO(existing.activity_date) : safeDateISO(''));
@@ -1197,6 +1326,47 @@ bot.onText(/\/help/, (msg)=> bot.sendMessage(msg.chat.id, getHelpText()));
 
 bot.onText(/\/new/, (msg)=> beginGuidedFlow(msg));
 bot.onText(/\/cancel/, (msg)=>{ pendingMenuActionByChatId[msg.chat.id] = null; endSession(msg.chat.id); bot.sendMessage(msg.chat.id, 'Canceled.'); });
+
+bot.onText(/\/missions\b/i, async (msg)=>{
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  try{
+    const list = await getMissionOptions();
+    if(!list.length) return bot.sendMessage(chatId, 'No missions found.');
+    return bot.sendMessage(chatId, 'Missions:\n' + list.map(x => '• ' + x).join('\n'));
+  }catch(e){
+    return bot.sendMessage(chatId, 'Failed: ' + (e.message || e));
+  }
+});
+
+bot.onText(/\/mission_add\s+([\s\S]+)/i, async (msg, match)=>{
+  const chatId = msg.chat.id;
+  if(!isAllowed(msg.from.id)) return bot.sendMessage(chatId, 'Not authorized');
+  const rawName = match && match[1] ? String(match[1]) : '';
+  const name = normalizeMission(rawName).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+  if(!name) return bot.sendMessage(chatId, 'Usage: /mission_add <name>');
+
+  if(!dbEnabled()){
+    // Non-DB mode: only affects in-memory defaults; still useful during local testing.
+    if(!DEFAULT_MISSIONS.includes(name)) DEFAULT_MISSIONS.push(name);
+    _missionOptionsCache = { at: 0, list: DEFAULT_MISSIONS.slice() };
+    return bot.sendMessage(chatId, 'Added mission (local only): ' + name);
+  }
+
+  try{
+    const pool = getDbPool();
+    if(!pool) throw new Error('DB is not configured');
+    await pool.query(
+      `INSERT INTO mission_options(name, active) VALUES ($1, true)
+       ON CONFLICT (name) DO UPDATE SET active = true`,
+      [name]
+    );
+    _missionOptionsCache = { at: 0, list: [] };
+    return bot.sendMessage(chatId, 'Added mission: ' + name + '\nUse /missions to verify.');
+  }catch(e){
+    return bot.sendMessage(chatId, 'Failed to add mission. If this is your first time, run telegram-bot/mission-schema.sql in Neon.\nError: ' + (e.message || e));
+  }
+});
 
 // Allow skipping steps in the guided flow from any step.
 bot.onText(/\/skip(?:@\w+)?/i, (msg)=>{
@@ -1262,6 +1432,54 @@ bot.on('message', async (msg)=>{
   const chatId = msg.chat.id;
   if(msg.edit_date) return;
 
+  // Handle recap draft editing (outside of guided sessions).
+  // This lets an approver edit the daily recap text after tapping "Edit ✏️".
+  if(!sessions[chatId] && recapEditByChatId[chatId]){
+    // Allow /cancel to exit recap editing.
+    if(msg.text && /^\/cancel\b/i.test(msg.text)){
+      delete recapEditByChatId[chatId];
+      return void bot.sendMessage(chatId, 'Recap edit canceled.');
+    }
+
+    const rawText = (typeof msg.text === 'string') ? msg.text : '';
+    if(!rawText.trim()) return void bot.sendMessage(chatId, 'Please send the edited recap text (HTML supported), or /cancel.');
+
+    const recapId = String(recapEditByChatId[chatId].recapId || '').trim();
+    delete recapEditByChatId[chatId];
+
+    if(!dbEnabled()) return void bot.sendMessage(chatId, 'DB not configured. Cannot edit recap.');
+    try{
+      const recap = await getRecapPostById(recapId);
+      if(!recap) return void bot.sendMessage(chatId, 'Recap not found.');
+      if(String(recap.status) !== 'pending') return void bot.sendMessage(chatId, 'Recap is not pending anymore.');
+
+      await updateRecapDraftHtml(recapId, rawText);
+
+      // Try to update the original preview message (if we have ids).
+      try{
+        const previewChatId = recap.preview_chat_id || String(chatId);
+        const previewMessageId = recap.preview_message_id;
+        if(previewChatId && previewMessageId){
+          await bot.editMessageText(rawText, {
+            chat_id: previewChatId,
+            message_id: previewMessageId,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: recapApprovalKeyboard(recapId)
+          });
+        }
+      }catch(e){
+        // If edit fails (e.g. message too old), just send a fresh preview.
+        await bot.sendMessage(chatId, rawText, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: recapApprovalKeyboard(recapId) });
+      }
+
+      return void bot.sendMessage(chatId, 'Recap updated. Review and approve when ready.');
+    }catch(e){
+      console.error('Recap edit failed', e);
+      return void bot.sendMessage(chatId, 'Recap edit failed: ' + (e.message || e));
+    }
+  }
+
   // Some users type "\" (backslash) instead of "/" (slash) for commands.
   // Support it as a convenience in private chat.
   if(typeof msg.text === 'string' && msg.text.startsWith('\\')){
@@ -1283,6 +1501,37 @@ bot.on('message', async (msg)=>{
         pendingMenuActionByChatId[chatId] = null;
         endSession(chatId);
         return void bot.sendMessage(chatId, 'Canceled.');
+      }
+      if(cmd === 'missions'){
+        const list = await getMissionOptions();
+        if(!list.length) return void bot.sendMessage(chatId, 'No missions found.');
+        return void bot.sendMessage(chatId, 'Missions:\n' + list.map(x => '• ' + x).join('\n'));
+      }
+      if(cmd === 'mission_add'){
+        if(!isAllowed(msg.from.id)) return void bot.sendMessage(chatId, 'Not authorized');
+        const rawName = String(arg || '');
+        const name = normalizeMission(rawName).replace(/\s+/g, ' ').replace(/:/g, ' - ').slice(0, 40);
+        if(!name) return void bot.sendMessage(chatId, 'Usage: /mission_add <name>');
+
+        if(!dbEnabled()){
+          if(!DEFAULT_MISSIONS.includes(name)) DEFAULT_MISSIONS.push(name);
+          _missionOptionsCache = { at: 0, list: DEFAULT_MISSIONS.slice() };
+          return void bot.sendMessage(chatId, 'Added mission (local only): ' + name);
+        }
+
+        try{
+          const pool = getDbPool();
+          if(!pool) throw new Error('DB is not configured');
+          await pool.query(
+            `INSERT INTO mission_options(name, active) VALUES ($1, true)
+             ON CONFLICT (name) DO UPDATE SET active = true`,
+            [name]
+          );
+          _missionOptionsCache = { at: 0, list: [] };
+          return void bot.sendMessage(chatId, 'Added mission: ' + name + '\nUse /missions to verify.');
+        }catch(e){
+          return void bot.sendMessage(chatId, 'Failed to add mission. If this is your first time, run telegram-bot/mission-schema.sql in Neon.\nError: ' + (e.message || e));
+        }
       }
       if(cmd === 'skip'){
         const s = sessions[chatId];
@@ -1341,6 +1590,20 @@ bot.on('message', async (msg)=>{
         // keep current
       } else {
         s.data.title = msg.text || msg.caption || s.data.title || 'Untitled';
+      }
+      if(isEditMenuMode(s)){
+        s.step = 'edit_menu';
+        return promptForStep(chatId, s);
+      }
+      s.step = 'mission';
+      return promptForStep(chatId, s);
+    }
+    if(s.step==='mission'){
+      const raw = (msg.text||'').trim();
+      if(isSkipText(raw)){
+        if(s.mode !== 'edit') s.data.mission = '';
+      } else {
+        s.data.mission = normalizeMission(raw);
       }
       if(isEditMenuMode(s)){
         s.step = 'edit_menu';
@@ -1626,6 +1889,25 @@ bot.on('callback_query', async (cq) => {
       return;
     }
 
+    // Mission picker (works in create/edit flows)
+    if(typeof data === 'string' && data.startsWith('_set_mission:')){
+      const raw = String(data.slice('_set_mission:'.length) || '').trim();
+      if(raw === '__manual__'){
+        await bot.answerCallbackQuery(cq.id, { text: 'Type mission…' });
+        session.step = 'mission';
+        await bot.sendMessage(chatId, 'Please type the mission name (e.g. "Palestin"). Or /skip to keep.', { reply_markup:{ force_reply:true } });
+        return;
+      }
+      let decoded = '';
+      try{ decoded = decodeURIComponent(raw); }catch(e){ decoded = raw; }
+      const m = normalizeMission(decoded);
+      session.data.mission = m;
+      await bot.answerCallbackQuery(cq.id, { text: m ? ('Mission: ' + m) : 'Mission cleared' });
+      if(session.step === 'mission') session.step = 'type';
+      await promptForStep(chatId, session);
+      return;
+    }
+
     // Edit menu actions (only when a session exists)
     if(data === '_edit_cancel'){
       await bot.answerCallbackQuery(cq.id, { text: 'Canceled' });
@@ -1649,6 +1931,13 @@ bot.on('callback_query', async (cq) => {
       session.editMode = 'menu';
       session.step = 'title';
       await bot.answerCallbackQuery(cq.id, { text: 'Title' });
+      await promptForStep(chatId, session);
+      return;
+    }
+    if(data === '_edit_field_mission'){
+      session.editMode = 'menu';
+      session.step = 'mission';
+      await bot.answerCallbackQuery(cq.id, { text: 'Mission' });
       await promptForStep(chatId, session);
       return;
     }
@@ -1752,6 +2041,77 @@ bot.on('callback_query', async (cq) => {
       endSession(chatId);
       return;
     }
+
+    // Daily recap approval workflow (used by Railway cron job recap-daily.js)
+    if(typeof data === 'string' && data.startsWith('_recap_')){
+      if(!isAllowed(cq.from && cq.from.id)){
+        await bot.answerCallbackQuery(cq.id, { text: 'Not authorized' });
+        return;
+      }
+      if(!dbEnabled()){
+        await bot.answerCallbackQuery(cq.id, { text: 'DB not configured' });
+        return;
+      }
+      const parts = data.split(':');
+      const action = parts[0];
+      const recapId = parts[1] ? String(parts[1]).trim() : '';
+      if(!isUuidLike(recapId)){
+        await bot.answerCallbackQuery(cq.id, { text: 'Invalid recap id' });
+        return;
+      }
+
+      const recap = await getRecapPostById(recapId);
+      if(!recap){
+        await bot.answerCallbackQuery(cq.id, { text: 'Recap not found' });
+        return;
+      }
+      if(String(recap.status) !== 'pending'){
+        await bot.answerCallbackQuery(cq.id, { text: 'Already handled' });
+        return;
+      }
+
+      if(action === '_recap_cancel'){
+        await markRecapCanceled(recapId);
+        try{ await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id }); }catch(e){}
+        await bot.answerCallbackQuery(cq.id, { text: 'Canceled' });
+        await bot.sendMessage(chatId, 'Recap canceled.');
+        return;
+      }
+
+      if(action === '_recap_edit'){
+        recapEditByChatId[chatId] = { recapId };
+        await bot.answerCallbackQuery(cq.id, { text: 'Edit' });
+        await bot.sendMessage(chatId, 'Send the edited recap text now (HTML supported). Type /cancel to stop editing.');
+        return;
+      }
+
+      if(action === '_recap_approve'){
+        if(!ANNOUNCE_CHAT_ID){
+          await bot.answerCallbackQuery(cq.id, { text: 'No channel configured' });
+          await bot.sendMessage(chatId, 'Missing TELEGRAM_CHANNEL_ID / TELEGRAM_ANNOUNCE_CHAT_ID. Cannot post recap.');
+          return;
+        }
+
+        const text = String(recap.draft_html || '').trim();
+        if(!text){
+          await bot.answerCallbackQuery(cq.id, { text: 'Empty recap' });
+          await bot.sendMessage(chatId, 'Recap draft is empty; not posting.');
+          return;
+        }
+
+        // Post to channel
+        const posted = await bot.sendMessage(ANNOUNCE_CHAT_ID, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+        await markRecapPosted(recapId, ANNOUNCE_CHAT_ID, posted && posted.message_id);
+        try{ await bot.editMessageReplyMarkup({}, { chat_id: chatId, message_id: cq.message.message_id }); }catch(e){}
+        await bot.answerCallbackQuery(cq.id, { text: 'Posted' });
+        await bot.sendMessage(chatId, 'Recap approved and posted.');
+        return;
+      }
+
+      await bot.answerCallbackQuery(cq.id, { text: 'Unknown recap action' });
+      return;
+    }
+
     await bot.answerCallbackQuery(cq.id, { text: 'Unknown action' });
   }catch(e){ console.error('callback_query error', e); }
 });
