@@ -173,6 +173,81 @@
         background:rgba(27,30,34,.98); color:#f4f2ee; padding:8px 10px; border-radius:8px; font-size:13px; box-shadow:0 8px 20px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .12s ease, transform .12s ease; z-index:2147483647;
         white-space:nowrap;
       }
+
+      function updateKpi(items){
+        try{
+          var BASE = 31230;
+          var KPI = 10000000;
+          items = items || [];
+          // sum of all distribution counts
+          var sumAllDist = (items || []).reduce(function(s,it){ return s + (isDistributionType(it.activity_type) ? (Number(it.count_number) || 0) : 0); }, 0);
+          // year-to-date distributions
+          var yearStart = new Date((new Date()).getFullYear(), 0, 1).getTime();
+          var sumYearDist = (items || []).reduce(function(s,it){ var ts = toTs(it.date); if(!isFinite(ts)) ts = 0; return s + ((isDistributionType(it.activity_type) && ts >= yearStart) ? (Number(it.count_number) || 0) : 0); }, 0);
+          // local (Malaysia) distributions added to base
+          var sumLocalDist = (items || []).reduce(function(s,it){ var ctry = String(it.country||'').toLowerCase(); var loc = String(it.location||'').toLowerCase(); if(isDistributionType(it.activity_type) && (ctry.indexOf('malaysia')!==-1 || loc.indexOf('malaysia')!==-1)) return s + (Number(it.count_number) || 0); return s; }, 0);
+
+          var localTotal = BASE + sumLocalDist;
+          var overallTotal = BASE + sumAllDist;
+
+          // percent by year (BASE + yearDist) relative to KPI
+          var pct = ( (BASE + sumYearDist) / KPI ) * 100;
+          if(!isFinite(pct)) pct = 0;
+          pct = Math.max(0, Math.min(100, pct));
+
+          // update dom
+          try{ var elLocal = document.getElementById('kpi-local-count'); if(elLocal) elLocal.textContent = formatNumber(localTotal); }catch(e){}
+          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.textContent = formatNumber(overallTotal); }catch(e){}
+          try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
+          try{ var pi = document.getElementById('progressInner'); if(pi) { pi.style.width = pct.toFixed(2) + '%'; pi.setAttribute('aria-valuenow', pct.toFixed(2)); } }catch(e){}
+          try{ var pp = document.getElementById('progressPercent'); if(pp) pp.textContent = pct.toFixed(2) + '%'; }catch(e){}
+          try{ var pt = document.getElementById('progressTarget'); if(pt) pt.textContent = formatNumber(KPI); }catch(e){}
+          try{ var months = computeMonthlyDistribution(items); renderSparkline(months); }catch(e){}
+        }catch(e){ console.warn('updateKpi error', e); }
+      }
+      
+        function renderSparkline(monthly){
+          try{
+            var svg = document.getElementById('kpi-sparkline');
+            if(!svg) return;
+            monthly = (monthly || []).slice(0,12);
+            var w = 200, h = 40, pad = 4;
+            var maxv = Math.max.apply(null, monthly.concat([1]));
+            var points = monthly.map(function(v,i){
+              var x = (i/(Math.max(1, monthly.length-1))) * (w - pad*2) + pad;
+              var y = h - pad - ((v / maxv) * (h - pad*2));
+              return x + ',' + y;
+            }).join(' ');
+            var areaPoints = '';
+            if(points){
+              var ptsArr = points.split(' ');
+              areaPoints = '' + pad + ',' + (h-pad) + ' ' + ptsArr.join(' ') + ' ' + (w-pad) + ',' + (h-pad);
+            }
+            var inner = '';
+            if(areaPoints) inner += '<polyline points="'+areaPoints+'" fill="rgba(190,170,141,0.08)" stroke="none"></polyline>';
+            inner += '<polyline points="'+points+'" fill="none" stroke="#BEAA8D" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>';
+            inner += monthly.map(function(v,i){ var x = (i/(Math.max(1, monthly.length-1))) * (w - pad*2) + pad; var y = h - pad - ((v / maxv) * (h - pad*2)); return '<circle cx="'+x+'" cy="'+y+'" r="2" fill="#BEAA8D"></circle>'; }).join('');
+            svg.innerHTML = inner;
+          }catch(e){ console.warn('renderSparkline failed', e); }
+        }
+
+        // compute month buckets (Jan..Dec) of distribution counts for the current year
+        function computeMonthlyDistribution(items){
+          var months = new Array(12).fill(0);
+          var year = (new Date()).getFullYear();
+          (items || []).forEach(function(it){
+            try{
+              if(!isDistributionType(it.activity_type)) return;
+              var ts = toTs(it.date);
+              if(!isFinite(ts)) return;
+              var d = new Date(ts);
+              if(d.getFullYear() !== year) return;
+              var m = d.getMonth();
+              months[m] += Number(it.count_number) || 0;
+            }catch(e){}
+          });
+          return months;
+        }
       .activity-sub, .activity-sub .activity-date, .activity-sub .activity-count { color:#cfc6b8; font-size:13px; }
       .activity-right { min-width:120px; display:flex; justify-content:flex-end; }
       .activity-location { display:inline-flex; align-items:center; gap:8px; color:#f4f2ee; font-weight:600; }
@@ -603,6 +678,7 @@
 
         // Keep the dashboard table in sync with the latest feed.
         try{ renderDistributionTable(items); }catch(e){ console.warn('Impact table render failed', e); }
+        try{ updateKpi(items); }catch(e){ console.warn('KPI update failed', e); }
 
         // update page header last-updated using newest activity timestamp
         try{
@@ -1510,25 +1586,29 @@
       <div class="kpi-numbers">
         <div class="item">
           <small>Malaysia</small>
-          <b>31,230</b>
+          <b id="kpi-local-count">31,230</b>
         </div>
         <div class="item">
           <small>All</small>
-          <b>1,453,456</b>
+          <b id="kpi-all-count">1,453,456</b>
         </div>
         <div class="item">
           <small>Target</small>
-          <b>10,000,000</b>
+          <b id="kpi-target">10,000,000</b>
         </div>
       </div>
     </div>
 
-    <div class="progress-outer" aria-label="Overall progress" role="progressbar" 
-         aria-valuemin="0" aria-valuemax="100" aria-valuenow="14.53">
-      <div class="progress-inner" style="width:14.53%;"></div>
+    <div class="progress-outer" aria-label="Year progress" role="progressbar" 
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="progressInner" class="progress-inner" style="width:0%;"></div>
     </div>
     <div class="progress-foot">
-      <span>14.53%</span><span>100%</span>
+      <span id="progressPercent">0%</span><span id="progressTarget">10,000,000</span>
+    </div>
+    <div id="kpi-sparkline-wrap" style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+      <div style="font-size:12px;opacity:.85;min-width:92px">Yearly distribution</div>
+      <svg id="kpi-sparkline" width="200" height="40" viewBox="0 0 200 40" preserveAspectRatio="none" style="flex:1;max-width:360px"></svg>
     </div>
   </div>
 </div>
