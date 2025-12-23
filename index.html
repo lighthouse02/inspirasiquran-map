@@ -372,6 +372,14 @@
       .activity-attachment{ margin-top:10px; width:100%; }
       .activity-attachment-inner{ width:100%; position:relative; padding-top:56.25%; overflow:hidden; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,.25) }
       .activity-attachment-img{ position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; object-position:center center; display:block; }
+
+      /* Activity type filter chips (in-map feed card) */
+      .activity-type-filters{ display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; margin:0 0 8px 0; }
+      .activity-type-filters::-webkit-scrollbar{ height:6px; }
+      .activity-type-filters::-webkit-scrollbar-thumb{ background: rgba(190,170,141,.25); border-radius:999px; }
+      .activity-type-filter{ appearance:none; -webkit-appearance:none; background:rgba(190,170,141,.06); border:1px solid rgba(190,170,141,.12); color:#cfc6b8; font-size:12px; font-weight:800; padding:5px 10px; border-radius:999px; cursor:pointer; white-space:nowrap; line-height:1; }
+      .activity-type-filter:hover{ border-color: rgba(190,170,141,.25); }
+      .activity-type-filter.is-active{ background:rgba(255,107,107,.10); border-color: rgba(255,107,107,.20); color:#f4f2ee; }
     </style>
 
     <script>
@@ -623,6 +631,59 @@
 
       whenMapReady(function(map){
         mapRef = map;
+        // feed-only type filter state (does not affect KPI or markers)
+        var activityTypeFilterKey = 'all';
+        function typeKeyFromValue(v){
+          return String(v || '').trim().toLowerCase();
+        }
+        function typeKeyFromItem(it){
+          return typeKeyFromValue(it && it.activity_type);
+        }
+        function ensureActivityTypeFilters(items){
+          try{
+            var root = document.getElementById('activityTypeFilters');
+            if(!root) return;
+            items = items || [];
+            var map = {};
+            for(var i=0;i<items.length;i++){
+              var it = items[i];
+              var key = typeKeyFromItem(it);
+              if(!key) continue;
+              if(!map[key]) map[key] = { key:key, label:String(it.activity_type||'').trim(), count:0 };
+              map[key].count++;
+            }
+            var opts = Object.keys(map).map(function(k){ return map[k]; });
+            opts.sort(function(a,b){
+              // frequency desc, then label asc
+              var dc = (b.count||0) - (a.count||0);
+              if(dc) return dc;
+              return String(a.label||'').localeCompare(String(b.label||''));
+            });
+
+            root.innerHTML = '';
+            function addBtn(label, key){
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'activity-type-filter' + (key === activityTypeFilterKey ? ' is-active' : '');
+              btn.setAttribute('data-filter', key);
+              btn.textContent = label;
+              btn.addEventListener('click', function(){
+                activityTypeFilterKey = key;
+                try{
+                  Array.from(root.querySelectorAll('.activity-type-filter')).forEach(function(b){
+                    b.classList.toggle('is-active', b.getAttribute('data-filter') === activityTypeFilterKey);
+                  });
+                }catch(e){}
+                try{ applyFilter(); }catch(e){}
+              });
+              root.appendChild(btn);
+            }
+
+            addBtn('All', 'all');
+            opts.forEach(function(o){ addBtn(o.label || o.key, o.key); });
+          }catch(e){ console.warn('Activity type filters init failed', e); }
+        }
+
         // Create an in-map activity control (timeline + feed)
         if(!mapControlCreated){
           var MapActivityControl = L.Control.extend({
@@ -642,6 +703,7 @@
                     </div>
                     <div class="mac-content">
                       <div style="margin-bottom:8px"><label style="color:#cfc6b8;font-size:13px;display:block;margin-bottom:6px">Timeline: <span id="mapTimelineLabel">All</span></label><input id="mapTimelineRange" type="range" style="width:100%"/></div>
+                      <div id="activityTypeFilters" class="activity-type-filters" aria-label="Filter activity feed by type"></div>
                       <div id="mapActivityFeed" class="activity-cards" style="max-height:48vh;overflow:auto;padding-right:6px"></div>
                     </div>
                   `;
@@ -782,6 +844,9 @@
           note: it.note || '',
           highlights: it.highlights || ''
         })).sort((a,b)=> a.date - b.date);
+
+        // init/rebuild activity type filter chips (feed-only)
+        try{ ensureActivityTypeFilters(items); }catch(e){}
 
         // Keep the dashboard table in sync with the latest feed.
         try{ renderDistributionTable(items); }catch(e){ console.warn('Impact table render failed', e); }
@@ -995,6 +1060,7 @@
           card.classList.add('activity-card--stack');
           card.setAttribute('data-activity-id', it.id);
           card.setAttribute('data-ts', it.date.getTime());
+          card.setAttribute('data-type', typeKeyFromItem(it));
           card._ts = it.date.getTime();
           let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
           // keep the small dot thumb (do not replace it with an inline image)
@@ -1121,7 +1187,9 @@
           // feed items
           Array.from(feedUL.children).forEach(li=>{
             const ts = parseInt(li.getAttribute('data-ts') || li._ts || 0);
-            li.style.display = (ts <= maxT) ? '' : 'none';
+            const typeKey = String(li.getAttribute('data-type') || '').toLowerCase();
+            const okType = (activityTypeFilterKey === 'all') || (typeKey && typeKey === activityTypeFilterKey);
+            li.style.display = (ts <= maxT && okType) ? '' : 'none';
           });
           // markers
           for(const id in markersById){
