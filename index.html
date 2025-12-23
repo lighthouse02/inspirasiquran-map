@@ -262,7 +262,8 @@
               }
             }
           }catch(e){}
-          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(globalTotal) + '</span>' + ' <span class="kpi-badge" aria-label="Malaysia subtotal">MY ' + formatNumber(myTotal) + '</span>'; }catch(e){}
+          // KPI card: show global total only (no MY badge here)
+          try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(globalTotal) + '</span>'; }catch(e){}
           try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
           try{ var pi = document.getElementById('progressInner'); if(pi) {
               // apply new width (CSS transition will animate)
