@@ -1419,6 +1419,9 @@
     border:2px solid rgba(107,226,125,.45);
     animation:ripple 1.8s ease-out infinite;
   }
+  /* Disable pulsing for specific pins by adding the 'no-pulse' class */
+  .pulse-pin.no-pulse{ animation: none !important; box-shadow: none !important; }
+  .pulse-pin.no-pulse:after{ animation: none !important; display: none !important; }
   @keyframes ripple { from{transform:scale(.6); opacity:.9} to{transform:scale(1.5); opacity:0} }
 </style>
     
@@ -2525,7 +2528,7 @@
         
     
             var div_icon_2b82740ae3d719b67f3eb7915b778c74 = L.divIcon({
-  "html": "\u003cdiv class=\"pulse-pin\" title=\"Launching 22 Dec 2025\"\u003e\u003c/div\u003e",
+  "html": "\u003cdiv class=\"pulse-pin no-pulse\" title=\"Launching 22 Dec 2025\"\u003e\u003c/div\u003e",
   "iconSize": [24, 24],
   "iconAnchor": [12, 12],
   "className": "empty",
