@@ -426,6 +426,8 @@
       (function(){
         // switched to Netlify function backend (Neon DB) — deploy function and set DATABASE_URL in Netlify env
         const ACTIVITIES_URL = '/.netlify/functions/get-activities';
+        // Local KPI country (can be overridden on window for testing):
+        const KPI_LOCAL_COUNTRY = (window.KPI_LOCAL_COUNTRY || 'Malaysia');
       let feedUL = document.getElementById('activityFeed');
       // We'll create an in-map control for the feed/timeline; keep the external feed as fallback
       const activityWrap = document.querySelector('.activity-wrap');
@@ -573,19 +575,42 @@
         // Update KPI card values from the table totals — add to any existing base numbers
         try{
           var totalAll = rows.reduce(function(s,r){ return s + (Number(r.total) || 0); }, 0);
-          // local: aggregate for Malaysia (case-insensitive)
-          var localTotal = rows.reduce(function(s,r){ return s + ((String(r.country||'').trim().toLowerCase() === 'malaysia') ? (Number(r.total) || 0) : 0); }, 0);
+          // local: aggregate for configured local country (case-insensitive)
+          var localKey = String(KPI_LOCAL_COUNTRY || 'Malaysia').trim().toLowerCase();
+          var localTotal = rows.reduce(function(s,r){ return s + ((String(r.country||'').trim().toLowerCase() === localKey) ? (Number(r.total) || 0) : 0); }, 0);
 
-          // parse existing base KPI numbers (if present) and add the table-derived totals
+          // parse and cache existing base KPI numbers once (if present) and add the table-derived totals
+          // NOTE: previously we re-parsed DOM text each render which caused repeated addition.
+          //       Store base values on first run in window.__kpiBaseAll / window.__kpiBaseLocal.
           var kpiAllEl = document.getElementById('kpi-all-count');
-          var baseAll = 0;
-          if(kpiAllEl){ baseAll = Number(String(kpiAllEl.textContent || kpiAllEl.innerText || '').replace(/[^0-9\.-]+/g,'')) || 0; }
+          if(typeof window.__kpiBaseAll === 'undefined'){
+            window.__kpiBaseAll = 0;
+            if(kpiAllEl){
+              var attrAll = kpiAllEl.getAttribute('data-base-all');
+              if(attrAll != null && String(attrAll).trim() !== ''){
+                window.__kpiBaseAll = Number(String(attrAll).replace(/[^0-9\.-]+/g,'')) || 0;
+              } else {
+                window.__kpiBaseAll = Number(String(kpiAllEl.textContent || kpiAllEl.innerText || '').replace(/[^0-9\.-]+/g,'')) || 0;
+              }
+            }
+          }
+          var baseAll = window.__kpiBaseAll || 0;
           var newAll = baseAll + totalAll;
           if(kpiAllEl) kpiAllEl.textContent = formatNumber(newAll);
 
           var kpiLocalEl = document.getElementById('kpi-local-count');
-          var baseLocal = 0;
-          if(kpiLocalEl){ baseLocal = Number(String(kpiLocalEl.textContent || kpiLocalEl.innerText || '').replace(/[^0-9\.-]+/g,'')) || 0; }
+          if(typeof window.__kpiBaseLocal === 'undefined'){
+            window.__kpiBaseLocal = 0;
+            if(kpiLocalEl){
+              var attrLocal = kpiLocalEl.getAttribute('data-base-local');
+              if(attrLocal != null && String(attrLocal).trim() !== ''){
+                window.__kpiBaseLocal = Number(String(attrLocal).replace(/[^0-9\.-]+/g,'')) || 0;
+              } else {
+                window.__kpiBaseLocal = Number(String(kpiLocalEl.textContent || kpiLocalEl.innerText || '').replace(/[^0-9\.-]+/g,'')) || 0;
+              }
+            }
+          }
+          var baseLocal = window.__kpiBaseLocal || 0;
           var newLocal = baseLocal + localTotal;
           if(kpiLocalEl) kpiLocalEl.textContent = formatNumber(newLocal);
 
@@ -600,6 +625,9 @@
           var progressInner = document.getElementById('progressInner'); if(progressInner) progressInner.style.width = percent + '%';
           var progressPercent = document.getElementById('progressPercent'); if(progressPercent) progressPercent.textContent = percent + '%';
           var progressTarget = document.getElementById('progressTarget'); if(progressTarget) progressTarget.textContent = formatNumber(targetVal);
+
+          // Debug: report KPI base and computed totals (remove in production)
+          try{ console.log('KPI debug', { baseAll: window.__kpiBaseAll, totalAll: totalAll, newAll: newAll, baseLocal: window.__kpiBaseLocal, localTotal: localTotal, newLocal: newLocal, targetVal: targetVal, percent: percent }); }catch(e){}
         }catch(e){}
 
         tbody.innerHTML = rows.map(function(r){
@@ -1810,15 +1838,15 @@
       <div class="kpi-numbers">
         <div class="item">
           <small>Malaysia</small>
-          <b id="kpi-local-count">31,230</b>
+          <b id="kpi-local-count" data-base-local="31230">31,230</b>
         </div>
         <div class="item">
           <small>All</small>
-          <b id="kpi-all-count">1,453,456</b>
+          <b id="kpi-all-count" data-base-all="1453456">1,453,456</b>
         </div>
         <div class="item">
           <small>Target</small>
-          <b id="kpi-target">10,000,000</b>
+          <b id="kpi-target" data-base-target="10000000">10,000,000</b>
         </div>
       </div>
     </div>
