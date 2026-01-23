@@ -218,51 +218,35 @@
             return (ctry.indexOf('malaysia') !== -1 || loc.indexOf('malaysia') !== -1);
           }
 
-          var sumGlobalOlder = 0;
-          var sumGlobalRecent = 0;
-          var sumMyOlder = 0;
-          var sumMyRecent = 0;
-
+          // Compute totals directly from items so KPI reflects table-derived sums
+          var sumGlobal = 0;
+          var sumMy = 0;
           (items || []).forEach(function(it){
             try{
               if(!isDistributionType(it.activity_type)) return;
               var c = Number(it.count_number) || 0;
               if(!isFinite(c) || c <= 0) return;
-              var ts = toTs(it.date);
-              if(!isFinite(ts)) ts = 0;
-              var isRecent = ts >= cutoff30;
-              if(isRecent) sumGlobalRecent += c; else sumGlobalOlder += c;
-              if(isMalaysia(it)){
-                if(isRecent) sumMyRecent += c; else sumMyOlder += c;
-              }
+              sumGlobal += c;
+              if(isMalaysia(it)) sumMy += c;
             }catch(e){}
           });
 
-          var myBaseDisplay = BASE_MY + sumMyOlder;
-          var myDeltaDisplay = sumMyRecent;
-          var myTotal = myBaseDisplay + myDeltaDisplay;
-
-          var globalTotal = BASE_GLOBAL + sumGlobalOlder + sumGlobalRecent;
+          var myTotal = sumMy;
+          var globalTotal = sumGlobal;
 
           // percent based on global progress (global total vs KPI target)
           var pct = ( globalTotal / KPI ) * 100;
           if(!isFinite(pct)) pct = 0;
           pct = Math.max(0, Math.min(100, pct));
 
-          // update dom
+          // update dom: show totals (global and local) derived from table data
           try{
             var elLocal = document.getElementById('kpi-local-count');
             if(elLocal){
-              if(myDeltaDisplay > 0){
-                elLocal.innerHTML = '<span class="kpi-base-num">' + formatNumber(myBaseDisplay) + '</span>'
-                  + '<span class="kpi-plus">+</span>'
-                  + '<span class="kpi-delta-num">' + formatNumber(myDeltaDisplay) + '</span>';
-              } else {
-                elLocal.textContent = formatNumber(myBaseDisplay);
-              }
+              // display simple total for local (no base+delta split when using table sums)
+              elLocal.textContent = formatNumber(myTotal);
             }
           }catch(e){}
-          // KPI card: show global total only (no MY badge here)
           try{ var elAll = document.getElementById('kpi-all-count'); if(elAll) elAll.innerHTML = '<span class="kpi-all-num">' + formatNumber(globalTotal) + '</span>'; }catch(e){}
           try{ var elTarget = document.getElementById('kpi-target'); if(elTarget) elTarget.textContent = formatNumber(KPI); }catch(e){}
           try{ var pi = document.getElementById('progressInner'); if(pi) {
