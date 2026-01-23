@@ -570,6 +570,28 @@
           if(hc) hc.textContent = formatNumber(set.size);
         }catch(e){}
 
+        // Update KPI card values from the table totals
+        try{
+          var totalAll = rows.reduce(function(s,r){ return s + (Number(r.total) || 0); }, 0);
+          // local: aggregate for Malaysia (case-insensitive)
+          var localTotal = rows.reduce(function(s,r){ return s + ((String(r.country||'').trim().toLowerCase() === 'malaysia') ? (Number(r.total) || 0) : 0); }, 0);
+
+          var kpiAll = document.getElementById('kpi-all-count'); if(kpiAll) kpiAll.textContent = formatNumber(totalAll);
+          var kpiLocal = document.getElementById('kpi-local-count'); if(kpiLocal) kpiLocal.textContent = formatNumber(localTotal);
+
+          var kpiTargetEl = document.getElementById('kpi-target');
+          var rawTarget = kpiTargetEl ? String(kpiTargetEl.textContent || kpiTargetEl.innerText || '') : '';
+          var targetVal = Number((rawTarget || '').replace(/[^0-9\.-]+/g, ''));
+          if(!isFinite(targetVal) || targetVal <= 0) targetVal = 10000000; // sensible fallback
+          if(kpiTargetEl) kpiTargetEl.textContent = formatNumber(targetVal);
+
+          var percent = Math.round((totalAll / (targetVal || 1)) * 100);
+          percent = Math.max(0, Math.min(100, percent));
+          var progressInner = document.getElementById('progressInner'); if(progressInner) progressInner.style.width = percent + '%';
+          var progressPercent = document.getElementById('progressPercent'); if(progressPercent) progressPercent.textContent = percent + '%';
+          var progressTarget = document.getElementById('progressTarget'); if(progressTarget) progressTarget.textContent = formatNumber(targetVal);
+        }catch(e){}
+
         tbody.innerHTML = rows.map(function(r){
           var delta = r.delta30 > 0 ? ('<span class="delta">+' + escapeHtml(formatNumber(r.delta30)) + '</span>') : '';
           return '<tr data-key="' + escapeAttr(r._key) + '">' 
