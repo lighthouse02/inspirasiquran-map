@@ -149,18 +149,119 @@
   })();
 </script>
     <style>
-      /* Page timeline - create a visible track and place incidents inside it */
-      .page-timeline-track{ position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:14px; background:#121316; border-radius:6px; border:2px solid rgba(255,255,255,0.04); box-shadow: inset 0 0 0 4px rgba(17,19,21,0.6); z-index:1 }
-      .page-timeline-dots{ position:relative; height:0; }
-      .page-timeline-counts{ position:relative; height:0; }
-      .page-timeline-count{ position:absolute; top:-30px; transform:translateX(-50%); background:#ff6b6b;color:#111;font-weight:800;border-radius:999px;padding:4px 6px;font-size:12px; box-shadow:0 6px 14px rgba(0,0,0,.45); pointer-events:auto; z-index:5 }
-      /* incident buttons placed inside the track (centered vertically) */
-      .page-timeline-dot{ position:absolute; top:50%; transform:translate(-50%,-50%); width:12px; height:12px; border-radius:50%; background:#ff6b6b; border:0; transition:all .12s ease; cursor:pointer; box-shadow:0 6px 14px rgba(0,0,0,.25); z-index:6 }
-      .page-timeline-dot.active{ background:#ff6b6b; box-shadow:0 0 8px rgba(255,107,107,0.45); width:12px; height:12px; }
-      .page-timeline-hoverlabel{ position:absolute; top:-44px; transform:translateX(-50%); font-family:monospace; font-size:12px; padding:6px 8px; border-radius:6px; background:#111; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; }
-      .page-timeline-handle{ position:absolute; top:50%; transform:translate(-50%,-50%); width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #ff6b6b; box-shadow:0 6px 18px rgba(0,0,0,.45); z-index:8; cursor:grab; }
-      .page-timeline-handle:active{ cursor:grabbing }
-      #pageMapTimeline{ margin-bottom:6px }
+      /* Page timeline */
+      #pageMapTimeline {
+        max-width: 1180px; margin: 0 auto;
+        padding: 10px 16px;
+        background: linear-gradient(145deg, #1c1f24, #171a1f);
+        border-bottom: 1px solid rgba(190,170,141,.10);
+      }
+      .page-timeline-inner {
+        display: flex; align-items: center; gap: 14px;
+        color: #cfc6b8; font-size: 13px;
+      }
+      .page-timeline-label-text {
+        font-size: 10px; font-weight: 700; letter-spacing: .1em;
+        text-transform: uppercase; color: #BEAA8D; opacity: .7;
+        white-space: nowrap; min-width: 68px;
+      }
+      .page-timeline-slider-wrap {
+        flex: 1; min-width: 0; position: relative; height: 40px;
+      }
+      /* invisible native range sits on top to capture drag/keyboard */
+      #pageMapTimelineRange {
+        position: absolute; left: 0; right: 0; top: 50%;
+        transform: translateY(-50%); width: 100%;
+        height: 40px; margin: 0;
+        background: transparent;
+        -webkit-appearance: none; appearance: none;
+        z-index: 10; cursor: pointer;
+      }
+      #pageMapTimelineRange::-webkit-slider-runnable-track { background: transparent; height: 40px; }
+      #pageMapTimelineRange::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: transparent; }
+      #pageMapTimelineRange::-moz-range-track { background: transparent; height: 40px; }
+      #pageMapTimelineRange::-moz-range-thumb { width: 20px; height: 20px; background: transparent; border: none; }
+
+      /* visible custom track */
+      .page-timeline-track {
+        position: absolute; left: 0; right: 0; top: 50%;
+        transform: translateY(-50%);
+        height: 6px;
+        background: rgba(255,255,255,.06);
+        border-radius: 999px;
+        z-index: 1;
+      }
+      /* filled portion (left of handle) */
+      .page-timeline-track::after {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+        width: var(--tl-pct, 100%);
+        background: linear-gradient(90deg, #7a6e5a, #BEAA8D);
+        border-radius: 999px;
+        transition: width .05s linear;
+      }
+
+      .page-timeline-dots  { position: relative; height: 0; }
+      .page-timeline-counts{ position: relative; height: 0; }
+
+      /* incident dots */
+      .page-timeline-dot {
+        position: absolute; top: 50%; transform: translate(-50%, -50%);
+        width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(255,255,255,.18);
+        border: 0; cursor: pointer;
+        transition: background .12s, box-shadow .12s, transform .12s;
+        z-index: 6;
+      }
+      .page-timeline-dot:hover {
+        background: #ff8c69;
+        box-shadow: 0 0 8px rgba(255,140,105,.5);
+        transform: translate(-50%,-50%) scale(1.4);
+      }
+      .page-timeline-dot.active {
+        background: #BEAA8D;
+        box-shadow: 0 0 6px rgba(190,170,141,.45);
+      }
+
+      /* stack count badge */
+      .page-timeline-count {
+        position: absolute; top: -22px; transform: translateX(-50%);
+        background: #ff8c69; color: #111; font-weight: 800;
+        border-radius: 999px; padding: 2px 6px; font-size: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,.4);
+        pointer-events: auto; z-index: 5;
+      }
+
+      /* draggable handle */
+      .page-timeline-handle {
+        position: absolute; top: 50%; transform: translate(-50%, -50%);
+        width: 16px; height: 16px; border-radius: 50%;
+        background: #f4f2ee;
+        border: 2px solid #BEAA8D;
+        box-shadow: 0 2px 10px rgba(0,0,0,.5);
+        z-index: 8; cursor: grab;
+        transition: box-shadow .12s, transform .12s;
+      }
+      .page-timeline-handle:hover {
+        box-shadow: 0 0 0 4px rgba(190,170,141,.25), 0 2px 10px rgba(0,0,0,.5);
+      }
+      .page-timeline-handle:active { cursor: grabbing; transform: translate(-50%,-50%) scale(1.15); }
+
+      /* hover date label */
+      .page-timeline-hoverlabel {
+        position: absolute; transform: translateX(-50%);
+        font-family: Inter, system-ui, monospace; font-size: 11px;
+        padding: 4px 8px; border-radius: 6px;
+        background: #1c1f24; color: #f4f2ee;
+        border: 1px solid rgba(190,170,141,.15);
+        box-shadow: 0 6px 18px rgba(0,0,0,.5);
+        pointer-events: none; white-space: nowrap; z-index: 9999;
+      }
+
+      /* count chip on the right */
+      .page-timeline-count-chip {
+        font-size: 12px; font-weight: 700; color: #BEAA8D;
+        min-width: 36px; text-align: right; white-space: nowrap;
+      }
 
       /* Activity feed styles (match table width/appearance) */
       .activity-wrap { margin-top:14px; }
@@ -1072,6 +1173,9 @@
                   pct = Math.max(0, Math.min(100, pct));
                   h.style.left = pct + '%';
                   h.setAttribute('title', new Date(v).toLocaleString());
+                  // update filled-portion gradient on the track
+                  var track = document.getElementById('pageMapTimelineTrack');
+                  if(track) track.style.setProperty('--tl-pct', pct + '%');
                 }
                 // wire range events so handle moves when slider changes
                 try{ timelineRange.addEventListener('input', updateHandle); }catch(e){}
@@ -1365,28 +1469,20 @@
             <div class="folium-map" id="map_650a101fa46c8081aa4ee9eed624a32a" ></div>
 
             <!-- Page-level timeline placed directly after the map -->
-            <div id="pageMapTimeline" style="max-width:1180px;margin:8px auto 0;padding:0 16px;">
-              <div style="background:transparent;display:flex;align-items:center;gap:12px;color:#cfc6b8;font-size:13px;">
-                <label style="min-width:78px;color:#cfc6b8;font-weight:700;">Timeline</label>
-                <div style="flex:1; min-width:0; position:relative; height:44px;">
-                  <!-- range sits inside a relative container so we can absolutely place incident buttons above it -->
-                  <input id="pageMapTimelineRange" type="range" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);width:100%; height:14px; background:transparent; -webkit-appearance:none; appearance:none; z-index:3;">
-                    <style>
-                      /* style the native range thumb to be subtle and transparent so the custom track shows through */
-                      #pageMapTimelineRange::-webkit-slider-runnable-track{ height:14px; background:transparent; }
-                      #pageMapTimelineRange::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; margin-top:-2px; background:transparent; border-radius:50%; }
-                      #pageMapTimelineRange::-moz-range-track{ height:14px; background:transparent; }
-                      #pageMapTimelineRange::-moz-range-thumb{ width:18px; height:18px; background:transparent; border:none; }
-                    </style>
+            <div id="pageMapTimeline">
+              <div class="page-timeline-inner">
+                <span class="page-timeline-label-text">Timeline</span>
+                <div class="page-timeline-slider-wrap">
+                  <input id="pageMapTimelineRange" type="range">
                   <div id="pageMapTimelineTrack" class="page-timeline-track" aria-hidden="true"></div>
-                  <div id="pageMapTimelineCountsWrapper" style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); pointer-events:auto;">
+                  <div id="pageMapTimelineCountsWrapper" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;">
                     <div id="pageMapTimelineCounts" class="page-timeline-counts" aria-hidden="true"></div>
                   </div>
-                  <div id="pageMapTimelineDotsWrapper" style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); pointer-events:auto; z-index:4;">
+                  <div id="pageMapTimelineDotsWrapper" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;z-index:4;">
                     <div id="pageMapTimelineDots" class="page-timeline-dots" aria-hidden="true"></div>
                   </div>
                 </div>
-                <div id="pageMapTimelineLabel" style="min-width:44px; text-align:right; color:#cfc6b8; font-size:13px; white-space:nowrap;">All</div>
+                <div id="pageMapTimelineLabel" class="page-timeline-count-chip">—</div>
               </div>
             </div>
 
