@@ -3,6 +3,8 @@
 <head>
     
     <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <!-- Mapbox token loaded from gitignored config (not committed to source control) -->
+    <script src="/mapbox-config.js"></script>
 
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-YPX70ZECWT"></script>
@@ -90,7 +92,7 @@
     <div id="siteHeaderMetrics" style="display:flex;gap:22px;align-items:baseline;">
       <div>
         <div style="opacity:.6;font-size:11px;">Total Qur'an</div>
-        <div id="header-total" style="font-size:18px;font-weight:700;">31,230</div>
+        <div id="header-total" style="font-size:18px;font-weight:700;">1,453,456</div>
       </div>
       <div>
         <div style="opacity:.6;font-size:11px;">Projects</div>
@@ -555,10 +557,15 @@
           return;
         }
 
-        // header metrics: Projects = number of table rows; Countries = distinct countries in those rows
+        // header metrics: Projects = distinct missions; Countries = distinct countries in those rows
         try{
+          var missionSet = new Set();
+          rows.forEach(function(r){
+            var m = String(r && r.mission || '').trim();
+            if(m && m !== '—') missionSet.add(m);
+          });
           var hp = document.getElementById('header-projects');
-          if(hp) hp.textContent = formatNumber(rows.length);
+          if(hp) hp.textContent = formatNumber(missionSet.size || rows.length);
         }catch(e){}
         try{
           var set = new Set();
@@ -1706,104 +1713,164 @@
 <!-- Donate/Waqf button removed -->
     
 <style>
-  /* scoped to the dashboard area */
+  /* KPI card — improved UI */
   .kpi-wrap {
-    max-width: 1180px; margin: calc(var(--header-h,6px) + 8px) auto 10px; 
-    padding: 16px; font-family: system-ui, Arial;
+    max-width: 1180px; margin: 10px auto;
+    padding: 0 16px 16px; font-family: Inter, system-ui, Arial;
   }
   .kpi-card {
-    background:#171a1f; color:#f4f2ee; 
-    border:1px solid rgba(190,170,141,.35); 
-    border-radius:12px; padding:16px; 
-    box-shadow:0 6px 22px rgba(0,0,0,.35);
+    background: linear-gradient(145deg, #1c1f24 0%, #171a1f 100%);
+    color: #f4f2ee;
+    border: 1px solid rgba(190,170,141,.22);
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04);
+    position: relative; overflow: hidden;
   }
-  .kpi-row {
-    display:flex; align-items:baseline; flex-wrap:wrap; gap:18px; margin-bottom:10px;
+  .kpi-card::before {
+    content: ''; position: absolute; top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(190,170,141,.05) 0%, transparent 70%);
+    pointer-events: none;
   }
-  .kpi-title { font-weight:800; font-size:18px; letter-spacing:.2px; }
-  .kpi-numbers { margin-left:auto; display:flex; gap:18px; }
-  .kpi-numbers .item small { display:block; opacity:.7; font-size:12px; }
-  .kpi-numbers .item b { font-weight:800; font-size:16px; }
-
-  .kpi-badge {
-    display:inline-block; margin-left:8px; background:rgba(190,170,141,0.06);
-    color:#BEAA8D; border:1px solid rgba(190,170,141,0.12);
-    padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; vertical-align:middle;
+  .kpi-header {
+    display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 18px;
   }
-  .kpi-all-num { font-weight:800; }
-  .kpi-base-num { font-weight:800; color:#f4f2ee; }
-  .kpi-plus { opacity:.75; margin:0 6px; }
-  .kpi-delta-num { font-weight:900; color:#ff6b6b; }
-
-  /* Header KPI flash when updating */
-  #siteHeaderMetrics .kpi-badge{ font-size:11px; padding:3px 7px; }
-  .header-kpi-flash{ animation: headerFlash 900ms ease; }
-  @keyframes headerFlash{ 0%{ transform:scale(1); opacity:0.8 } 50%{ transform:scale(1.06); opacity:1 } 100%{ transform:scale(1); opacity:0.95 } }
+  .kpi-title-block { flex: 1; min-width: 0; }
+  .kpi-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: #BEAA8D; opacity: .75; margin-bottom: 4px;
+  }
+  .kpi-title {
+    font-weight: 800; font-size: 20px; letter-spacing: -.01em;
+    line-height: 1.25; color: #f4f2ee;
+  }
+  .kpi-stats {
+    display: flex; gap: 8px; flex-shrink: 0; align-items: flex-start; flex-wrap: wrap;
+  }
+  .kpi-stat {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(190,170,141,.11);
+    border-radius: 12px; padding: 10px 16px;
+    min-width: 88px; text-align: center;
+  }
+  .kpi-stat__label {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; opacity: .55; margin-bottom: 4px;
+  }
+  .kpi-stat__value { font-size: 16px; font-weight: 800; line-height: 1; }
+  .kpi-stat--my  .kpi-stat__value { color: #BEAA8D; }
+  .kpi-stat--all .kpi-stat__value { color: #f4f2ee; }
+  .kpi-stat--tgt .kpi-stat__value { color: #7a7060; }
 
   .progress-outer {
-    width:100%; height:16px; 
-    background:#0f1114; 
-    border:1px solid rgba(190,170,141,.35); 
-    border-radius:999px; overflow:hidden;
+    width: 100%; height: 10px;
+    background: rgba(255,255,255,.05);
+    border-radius: 999px; overflow: hidden;
   }
   .progress-inner {
-    height:100%; width:0%;
-    background:#BEAA8D;
-    border-right:2px solid rgba(255,255,255,.25);
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #9f8c70 0%, #BEAA8D 60%, #d4c4a8 100%);
+    border-radius: 999px;
     transition: width .9s cubic-bezier(.2,.9,.2,1);
-    position:relative; overflow:hidden;
+    position: relative; overflow: hidden;
   }
-
-  .progress-inner.animate-shimmer::after{
+  .progress-inner.animate-shimmer::after {
     content: '';
     position: absolute; left: -40%; top: 0; height: 100%; width: 40%;
-    background: linear-gradient(90deg, rgba(255,255,255,0.00), rgba(255,255,255,0.14), rgba(255,255,255,0.00));
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
     transform: skewX(-12deg);
     animation: shimmer 900ms ease-out;
     pointer-events: none;
   }
+  @keyframes shimmer { from { left: -40%; } to { left: 120%; } }
 
-  @keyframes shimmer{ from{ left: -40%; } to{ left: 120%; } }
-  .progress-foot {
-    display:flex; justify-content:space-between; 
-    font-size:12px; opacity:.8; margin-top:8px;
+  .progress-meta {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 6px; font-size: 12px;
+  }
+  .progress-meta__pct  { font-weight: 800; color: #BEAA8D; }
+  .progress-meta__mid  { opacity: .45; }
+  .progress-meta__tgt  { opacity: .45; }
+
+  .kpi-sparkline-row {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid rgba(190,170,141,.07);
+  }
+  .kpi-sparkline-row__label {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; opacity: .45; min-width: 88px; flex-shrink: 0;
   }
 
-  @media (max-width: 520px) {
-    .kpi-numbers { width:100%; margin-left:0; }
+  /* badge + live number helpers */
+  .kpi-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-left: 8px; background: rgba(190,170,141,.06);
+    color: #BEAA8D; border: 1px solid rgba(190,170,141,.13);
+    padding: 3px 8px; border-radius: 999px;
+    font-weight: 800; font-size: 11px; vertical-align: middle;
+  }
+  .kpi-all-num  { font-weight: 800; }
+  .kpi-base-num { font-weight: 800; color: #f4f2ee; }
+  .kpi-plus     { opacity: .6; margin: 0 3px; font-size: .85em; }
+  .kpi-delta-num{ font-weight: 900; color: #ff8c69; }
+
+  /* header flash */
+  #siteHeaderMetrics .kpi-badge { font-size: 11px; padding: 3px 7px; }
+  .header-kpi-flash { animation: headerFlash 900ms ease; }
+  @keyframes headerFlash {
+    0%  { transform: scale(1);    opacity: .8  }
+    50% { transform: scale(1.06); opacity: 1   }
+    100%{ transform: scale(1);    opacity: .95 }
+  }
+
+  @media (max-width: 600px) {
+    .kpi-header  { flex-direction: column; }
+    .kpi-stats   { width: 100%; }
+    .kpi-stat    { flex: 1; min-width: 70px; padding: 8px 10px; }
+    .kpi-stat__value { font-size: 14px; }
+    .kpi-card    { padding: 16px; }
   }
 </style>
 
 <div class="kpi-wrap">
   <div class="kpi-card">
-    <div class="kpi-row">
-      <div class="kpi-title">Naskhah Al-Qur’an Telah Diedarkan<br>Seluruh Dunia</div>
-      <div class="kpi-numbers">
-        <div class="item">
-          <small>Malaysia</small>
-          <b id="kpi-local-count">31,230</b>
+    <div class="kpi-header">
+      <div class="kpi-title-block">
+        <div class="kpi-eyebrow">Global Progress</div>
+        <div class="kpi-title">Naskhah Al-Qur’an Telah Diedarkan<br>Seluruh Dunia</div>
+      </div>
+      <div class="kpi-stats">
+        <div class="kpi-stat kpi-stat--my">
+          <div class="kpi-stat__label">Malaysia</div>
+          <div class="kpi-stat__value" id="kpi-local-count">31,230</div>
         </div>
-        <div class="item">
-          <small>All</small>
-          <b id="kpi-all-count">1,453,456</b>
+        <div class="kpi-stat kpi-stat--all">
+          <div class="kpi-stat__label">All</div>
+          <div class="kpi-stat__value" id="kpi-all-count">1,453,456</div>
         </div>
-        <div class="item">
-          <small>Target</small>
-          <b id="kpi-target">10,000,000</b>
+        <div class="kpi-stat kpi-stat--tgt">
+          <div class="kpi-stat__label">Target</div>
+          <div class="kpi-stat__value" id="kpi-target">10,000,000</div>
         </div>
       </div>
     </div>
 
-    <div class="progress-outer" aria-label="Year progress" role="progressbar" 
-         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <div id="progressInner" class="progress-inner" style="width:0%;"></div>
+    <div class="progress-outer" aria-label="Global distribution progress" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="14.53">
+      <div id="progressInner" class="progress-inner" style="width:14.53%;"></div>
     </div>
-    <div class="progress-foot">
-      <span id="progressPercent">0%</span><span id="progressTarget">10,000,000</span>
+    <div class="progress-meta">
+      <span class="progress-meta__pct" id="progressPercent">14.53%</span>
+      <span class="progress-meta__mid">of target reached</span>
+      <span class="progress-meta__tgt">Target: <span id="progressTarget">10,000,000</span></span>
     </div>
-    <div id="kpi-sparkline-wrap" style="margin-top:10px;display:flex;align-items:center;gap:12px;">
-      <div style="font-size:12px;opacity:.85;min-width:92px">Yearly distribution</div>
-      <svg id="kpi-sparkline" width="200" height="40" viewBox="0 0 200 40" preserveAspectRatio="none" style="flex:1;max-width:360px"></svg>
+
+    <div class="kpi-sparkline-row">
+      <span class="kpi-sparkline-row__label">This year</span>
+      <svg id="kpi-sparkline" width="200" height="36" viewBox="0 0 200 36" preserveAspectRatio="none" style="flex:1;max-width:400px"></svg>
     </div>
   </div>
 </div>
@@ -1830,7 +1897,7 @@
         
     
             var tile_layer_0205bfd226cfa1b960c5393589936452 = L.tileLayer(
-                "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoibWF0dW11YWR6IiwiYSI6ImNtZ2pnY3RxdzBqMWIyaXNmNWdpZGY1MHcifQ.SaKbTclv2YC_jYCyg4duNA",
+                "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=" + (window.MAPBOX_TOKEN || ''),
                 {
   "minZoom": 0,
   "maxZoom": 18,

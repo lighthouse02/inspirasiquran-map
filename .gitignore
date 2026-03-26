@@ -1,2 +1,5 @@
 # Ignore the Telegram bot token file (contains sensitive token)
 telegram-bot/telegram token.txt
+
+# Mapbox token — deploy this file manually; do not commit
+mapbox-config.js
