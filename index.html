@@ -451,168 +451,38 @@
       .activity-location { display:inline-flex; align-items:center; gap:8px; color:#f4f2ee; font-weight:600; }
       .location-dot { width:12px; height:12px; border-radius:50%; background:#ff4d4d; box-shadow:0 0 10px rgba(255,77,77,0.45); animation: feed-blink 1.2s linear infinite; }
       @keyframes feed-blink { 0% { opacity:1; transform:scale(1);} 50% { opacity:.25; transform:scale(.9);} 100% { opacity:1; transform:scale(1);} }
+      /* compact mobile layout */
       @media (max-width:720px){ .activity-item { flex-direction:column; align-items:flex-start; } .activity-right{ width:100%; justify-content:flex-start; margin-top:6px } }
+      /* Sumud-like card feed styles */
+      .activity-cards{ display:flex; flex-direction:column; gap:12px; }
+      .activity-card{ display:flex; gap:12px; align-items:flex-start; background:linear-gradient(180deg, rgba(25,27,30,0.6), rgba(18,20,23,0.6)); border:1px solid rgba(190,170,141,0.06); padding:12px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.45); transition: background .12s ease, transform .08s ease, border-color .12s ease; }
+      .activity-card:hover{ background: rgba(190,170,141,.03); transform: translateY(-1px); border-color: rgba(190,170,141,0.10); }
+      .activity-card.activity-card--stack{ flex-direction:column; align-items:stretch; }
+      /* replace large thumbnail with a compact red dot */
+      .activity-card .thumb{ width:28px; height:28px; border-radius:50%; background:transparent; display:flex; align-items:center; justify-content:center; color:#fff; font-size:0; flex-shrink:0 }
+      .activity-dot{ width:12px; height:12px; border-radius:50%; background:#ff6b6b; box-shadow:0 0 10px rgba(255,107,107,0.35); display:inline-block }
+      .activity-card-top{ display:flex; gap:12px; align-items:flex-start; width:100%; }
+      .activity-card .body{ flex:1; min-width:0 }
+      .activity-card .meta{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px }
+      .activity-chip{ display:inline-flex; align-items:center; max-width:100%; padding:4px 8px; border-radius:999px; background:rgba(190,170,141,.06); border:1px solid rgba(190,170,141,.10); color:#cfc6b8; font-size:12px; line-height:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+      .activity-chip--type{ font-weight:800; color:#f4f2ee; background:rgba(255,107,107,.10); border-color: rgba(255,107,107,.20); letter-spacing:.02em }
+      .activity-card .title{ color:#f4f2ee; font-weight:800; font-size:15px; margin-bottom:6px }
+      .activity-card .desc{ color:#d7d0c0; font-size:13px; opacity:.95; line-height:1.35 }
+      .activity-card .desc:empty{ display:none }
+      .activity-card .cta{ margin-left:12px; display:flex; flex-direction:column; gap:8px }
+      .activity-count{ font-weight:800; color:#111315; background:#BEAA8D; padding:8px 10px; border-radius:999px; box-shadow:0 8px 18px rgba(0,0,0,.35) }
+      .activity-count:empty{ display:none }
+      .activity-attachment{ margin-top:10px; width:100%; }
+      .activity-attachment-inner{ width:100%; position:relative; padding-top:56.25%; overflow:hidden; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,.25) }
+      .activity-attachment-img{ position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; object-position:center center; display:block; }
 
-      /* ===== Activity feed card redesign ===== */
-      .activity-cards { display:flex; flex-direction:column; gap:8px; }
-
-      .activity-card {
-        position: relative;
-        display: flex; flex-direction: column;
-        background: rgba(28,31,37,0.9);
-        border: 1px solid rgba(190,170,141,.1);
-        border-radius: 12px;
-        overflow: hidden;
-        cursor: pointer;
-        transition: border-color .15s, box-shadow .15s, transform .1s;
-      }
-      .activity-card:hover {
-        border-color: rgba(190,170,141,.22);
-        box-shadow: 0 6px 22px rgba(0,0,0,.5);
-        transform: translateY(-1px);
-      }
-      /* left accent bar by activity type */
-      .activity-card::before {
-        content: '';
-        position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-        background: rgba(190,170,141,.25);
-        border-radius: 3px 0 0 3px;
-      }
-      .activity-card[data-type="distribution"]::before { background: #BEAA8D; }
-      .activity-card[data-type="program"]::before     { background: #6fa8dc; }
-      .activity-card[data-type="meeting"]::before     { background: #93c47d; }
-      .activity-card[data-type="media"]::before       { background: #c27ba0; }
-      .activity-card[data-type="logistics"]::before   { background: #f6b26b; }
-      .activity-card[data-type="update"]::before        { background: #ffb84d; }
-      .activity-card[data-type="class"]::before         { background: #4ecdc4; }
-      .activity-card[data-type="arrival"]::before       { background: #ff8c69; }
-
-      /* top row: dot / body / count badge */
-      .activity-card-top {
-        display: flex; align-items: flex-start; gap: 9px;
-        padding: 12px 14px;
-      }
-
-      /* type-coloured dot — aligns with left accent bar colour */
-      .activity-card .thumb {
-        flex-shrink: 0; width: 9px; height: 9px; margin-top: 4px;
-        border-radius: 50%;
-        background: rgba(190,170,141,.35);
-      }
-      .activity-card[data-type="distribution"] .thumb { background: #BEAA8D; box-shadow: 0 0 0 3px rgba(190,170,141,.15); }
-      .activity-card[data-type="program"]      .thumb { background: #6fa8dc; box-shadow: 0 0 0 3px rgba(111,168,220,.15); }
-      .activity-card[data-type="meeting"]      .thumb { background: #93c47d; box-shadow: 0 0 0 3px rgba(147,196,125,.15); }
-      .activity-card[data-type="media"]        .thumb { background: #c27ba0; box-shadow: 0 0 0 3px rgba(194,123,160,.15); }
-      .activity-card[data-type="logistics"]    .thumb { background: #f6b26b; box-shadow: 0 0 0 3px rgba(246,178,107,.15); }
-      .activity-dot { display: none; } /* replaced by thumb in new design */
-
-      /* body */
-      .activity-card .body { flex: 1; min-width: 0; }
-
-      /* meta chips row */
-      .activity-card .meta {
-        display: flex; flex-wrap: wrap; gap: 5px;
-        align-items: center; margin-bottom: 5px;
-      }
-      .activity-chip {
-        display: inline-flex; align-items: center;
-        padding: 3px 8px; border-radius: 999px;
-        background: rgba(255,255,255,.05);
-        border: 1px solid rgba(255,255,255,.10);
-        color: #a09890; font-size: 11px; line-height: 1;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
-      }
-      .activity-chip--type {
-        font-weight: 700; font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
-        color: #BEAA8D;
-        background: rgba(190,170,141,.07);
-        border-color: rgba(190,170,141,.15);
-      }
-      .activity-card[data-type="program"]     .activity-chip--type { color:#6fa8dc; background:rgba(111,168,220,.07); border-color:rgba(111,168,220,.18); }
-      .activity-card[data-type="meeting"]     .activity-chip--type { color:#93c47d; background:rgba(147,196,125,.07); border-color:rgba(147,196,125,.18); }
-      .activity-card[data-type="media"]       .activity-chip--type { color:#c27ba0; background:rgba(194,123,160,.07); border-color:rgba(194,123,160,.18); }
-      .activity-card[data-type="logistics"]   .activity-chip--type { color:#f6b26b; background:rgba(246,178,107,.07); border-color:rgba(246,178,107,.18); }
-      .activity-card[data-type="update"]       .activity-chip--type { color:#ffb84d; background:rgba(255,184,77,.07);  border-color:rgba(255,184,77,.18); }
-      .activity-card[data-type="class"]        .activity-chip--type { color:#4ecdc4; background:rgba(78,205,196,.07);  border-color:rgba(78,205,196,.18); }
-      .activity-card[data-type="arrival"]      .activity-chip--type { color:#ff8c69; background:rgba(255,140,105,.07); border-color:rgba(255,140,105,.18); }
-
-      /* title */
-      .activity-card .title {
-        color: #ede8e0; font-weight: 700; font-size: 14px;
-        line-height: 1.35; margin-bottom: 2px;
-        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-
-      /* description */
-      .activity-card .desc {
-        color: #8a8278; font-size: 12px; line-height: 1.4;
-        margin-top: 4px;
-        display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .activity-card .desc:empty { display: none; }
-
-      /* location line below title */
-      .activity-card .card-location {
-        margin-top: 3px; font-size: 11px; color: #7a7268;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-
-      /* count badge — top-right corner */
-      .activity-card .cta {
-        flex-shrink: 0; display: flex; flex-direction: column;
-        align-items: flex-end; gap: 4px; margin-left: 4px;
-      }
-      .activity-count {
-        display: inline-block;
-        font-size: 12px; font-weight: 800; line-height: 1;
-        color: #111315;
-        background: #BEAA8D;
-        padding: 5px 10px; border-radius: 999px;
-        white-space: nowrap; flex-shrink: 0;
-        box-shadow: 0 2px 8px rgba(190,170,141,.3);
-      }
-      .activity-count:empty { display: none; }
-
-      /* attachment strip */
-      .activity-attachment { width: 100%; }
-      .activity-attachment-inner {
-        width: 100%; position: relative;
-        padding-top: 52%;
-        overflow: hidden; border-radius: 0 0 12px 12px;
-        border-top: 1px solid rgba(255,255,255,.05);
-        background: rgba(0,0,0,.3);
-      }
-      .activity-attachment-img {
-        position: absolute; top: 0; left: 0;
-        width: 100%; height: 100%;
-        object-fit: cover; object-position: center; display: block;
-        transition: transform .25s ease;
-      }
-      .activity-card:hover .activity-attachment-img { transform: scale(1.03); }
-
-      /* ===== Activity type filter pills ===== */
-      .activity-type-filters {
-        display: flex; gap: 5px; flex-wrap: nowrap;
-        overflow-x: auto; padding-bottom: 4px; margin: 0 0 8px;
-        scrollbar-width: thin;
-      }
-      .activity-type-filters::-webkit-scrollbar { height: 3px; }
-      .activity-type-filters::-webkit-scrollbar-thumb { background: rgba(190,170,141,.2); border-radius: 999px; }
-      .activity-type-filter {
-        appearance: none; -webkit-appearance: none;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(255,255,255,.08);
-        color: #7a7268; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-        padding: 5px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; line-height: 1;
-        transition: background .12s, border-color .12s, color .12s;
-      }
-      .activity-type-filter:hover { border-color: rgba(190,170,141,.22); color: #cfc6b8; }
-      .activity-type-filter.is-active {
-        background: rgba(190,170,141,.1); border-color: rgba(190,170,141,.28);
-        color: #BEAA8D;
-      }
+      /* Activity type filter chips (in-map feed card) */
+      .activity-type-filters{ display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; margin:0 0 8px 0; }
+      .activity-type-filters::-webkit-scrollbar{ height:6px; }
+      .activity-type-filters::-webkit-scrollbar-thumb{ background: rgba(190,170,141,.25); border-radius:999px; }
+      .activity-type-filter{ appearance:none; -webkit-appearance:none; background:rgba(190,170,141,.06); border:1px solid rgba(190,170,141,.12); color:#cfc6b8; font-size:12px; font-weight:800; padding:5px 10px; border-radius:999px; cursor:pointer; white-space:nowrap; line-height:1; }
+      .activity-type-filter:hover{ border-color: rgba(190,170,141,.25); }
+      .activity-type-filter.is-active{ background:rgba(255,107,107,.10); border-color: rgba(255,107,107,.20); color:#f4f2ee; }
     </style>
 
     <script>
@@ -971,18 +841,21 @@
             options: { position: 'topright' },
             onAdd: function(){
               var container = L.DomUtil.create('div', 'map-activity-control');
-              container.style.cssText = 'max-width:360px;width:360px;background:linear-gradient(160deg,#191c21,#141619);border:1px solid rgba(190,170,141,.12);border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.04) inset;overflow:hidden;font-family:Inter,system-ui,Arial;';
+              container.style.maxWidth = '380px';
+              container.style.background = 'rgba(17,19,21,0.9)';
+              container.style.border = '1px solid rgba(190,170,141,.12)';
+              container.style.padding = '12px';
+              container.style.borderRadius = '12px';
+              container.style.boxShadow = '0 12px 34px rgba(0,0,0,.45)';
               container.innerHTML = `
-                    <div class="mac-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 10px;border-bottom:1px solid rgba(190,170,141,.07);">
-                      <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="width:7px;height:7px;border-radius:50%;background:#BEAA8D;box-shadow:0 0 6px rgba(190,170,141,.5);flex-shrink:0;"></span>
-                        <span style="font-weight:800;color:#f4f2ee;font-size:13px;letter-spacing:.01em;">Activity Feed</span>
-                      </div>
-                      <button class="map-activity-toggle" aria-expanded="true" title="Collapse" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);color:#9a9288;border-radius:6px;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;z-index:1300;pointer-events:auto;flex-shrink:0;">▼</button>
+                    <div class="mac-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                      <div style="font-weight:800;color:#f4f2ee;font-size:15px">Activity Feed</div>
+                      <button class="map-activity-toggle" aria-expanded="true" title="Collapse" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#f4f2ee;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;z-index:1300;pointer-events:auto">▼</button>
                     </div>
-                    <div class="mac-content" style="padding:10px 14px 14px;">
+                    <div class="mac-content">
+                      <div style="margin-bottom:8px"><label style="color:#cfc6b8;font-size:13px;display:block;margin-bottom:6px">Timeline: <span id="mapTimelineLabel">All</span></label><input id="mapTimelineRange" type="range" style="width:100%"/></div>
                       <div id="activityTypeFilters" class="activity-type-filters" aria-label="Filter activity feed by type"></div>
-                      <div id="mapActivityFeed" class="activity-cards" style="max-height:46vh;overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;"></div>
+                      <div id="mapActivityFeed" class="activity-cards" style="max-height:48vh;overflow:auto;padding-right:6px"></div>
                     </div>
                   `;
               // restore previous collapsed state if present
@@ -991,7 +864,11 @@
                 if(collapsed){
                   container.querySelector('.map-activity-toggle').setAttribute('aria-expanded','false');
                   container.querySelector('.map-activity-toggle').textContent = '▶';
-                  container.style.width = '200px';
+                  // keep rectangular shape but collapse content (short height)
+                  container.style.maxWidth = '380px';
+                  container.style.width = '280px';
+                  container.style.height = '52px';
+                  container.style.padding = '8px 12px';
                   container.style.overflow = 'hidden';
                   var mc = container.querySelector('.mac-content'); if(mc) mc.style.display = 'none';
                 }
@@ -1009,25 +886,36 @@
                     toggle.setAttribute('aria-expanded','false');
                     toggle.textContent = '▶';
                     if(content) content.style.display = 'none';
-                    container.style.width = '200px';
+                    // keep rectangular collapsed container
+                    container.style.maxWidth = '380px';
+                    container.style.width = '280px';
+                    container.style.height = '52px';
+                    container.style.padding = '8px 12px';
                     container.style.overflow = 'hidden';
                     try{ localStorage.setItem('mapActivityCollapsed','true'); }catch(e){}
                   } else {
                     toggle.setAttribute('aria-expanded','true');
                     toggle.textContent = '▼';
-                    if(content) content.style.display = '';
-                    container.style.width = '360px';
-                    container.style.overflow = 'hidden';
+                    if(content) content.style.display = 'block';
+                    container.style.maxWidth = '380px';
+                    container.style.width = '';
+                    container.style.height = '';
+                    container.style.padding = '12px';
+                    container.style.overflow = '';
                     try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(e){}
                   }
                 });
                 // allow clicking the small collapsed container area to re-open it
                 try{
                   container.addEventListener('click', function(ev){
+                    // if currently collapsed and click is not on inner content, open
                     if(toggle && toggle.getAttribute('aria-expanded') === 'false'){
+                      // ignore clicks that originate from map itself or from map controls nearby
                       if(ev.target && ev.target.closest && ev.target.closest('.mac-content')) return;
+                      // trigger toggle open
                       try{ toggle.click(); }catch(e){
-                        toggle.setAttribute('aria-expanded','true'); toggle.textContent = '▼'; if(content) content.style.display = ''; container.style.width = '360px'; container.style.overflow = ''; try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(_){}
+                        // fallback: directly expand
+                        toggle.setAttribute('aria-expanded','true'); toggle.textContent = '−'; if(content) content.style.display = 'block'; container.style.maxWidth = '380px'; try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(_){}
                       }
                     }
                   });
@@ -1318,14 +1206,13 @@
 
         // append items (oldest first so newest appears last by addActivity which inserts at top)
         for(const it of items){
-          const relTime = timeAgo(it.date);
-          const countStr = it.count_number
-            ? (formatNumber(it.count_number) + ' Mushaf')
-            : (it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '');
+          const dateStr = formatCardDate(it.date) || it.date.toLocaleString();
+          const countStr = it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '';
           const locationShort = simplifyPlaceName(it.location || '');
-          const countryStr = it.country ? escapeHtml(it.country) : '';
           // Render Sumud-style activity card
           const card = document.createElement('div'); card.className = 'activity-card';
+          // stack top row and attachment vertically so the attachment spans full card width
+          card.classList.add('activity-card--stack');
           card.setAttribute('data-activity-id', it.id);
           card.setAttribute('data-ts', it.date.getTime());
           card.setAttribute('data-type', typeKeyFromItem(it));
@@ -1333,20 +1220,15 @@
           let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
           // keep the small dot thumb (do not replace it with an inline image)
           const typeLabel = (it.activity_type ? String(it.activity_type) : '').trim();
-          // top meta row: TYPE pill + relative time
           const metaParts = [
-            (typeLabel ? `<span class="activity-chip activity-chip--type">${escapeHtml(typeLabel.toUpperCase())}</span>` : ''),
-            `<span class="activity-chip">${escapeHtml(relTime)}</span>`,
+            `<span class="activity-chip">${escapeHtml(dateStr)}</span>`,
+            (locationShort ? `<span class="activity-chip">${escapeHtml(locationShort)}</span>` : ''),
+            (typeLabel ? `<span class="activity-chip activity-chip--type">${escapeHtml(typeLabel.toUpperCase())}</span>` : '')
           ].filter(Boolean).join('');
           const meta = `<div class="meta">${metaParts}</div>`;
           const titleHtml = `<div class="title">${escapeHtml(it.title)}</div>`;
-          // location line: show short place name + country for context
-          const locDisplay = [locationShort, countryStr].filter(Boolean).join(', ');
-          const locHtml = locDisplay
-            ? `<div class="card-location">${locDisplay}</div>`
-            : '';
           const descHtml = `<div class="desc">${escapeHtml(it.note||'')}</div>`;
-          const body = `<div class="body">${meta}${titleHtml}${locHtml}${descHtml}</div>`;
+          const body = `<div class="body">${meta}${titleHtml}${descHtml}</div>`;
           const cta = `<div class="cta"><div class="activity-count">${escapeHtml(countStr)}</div></div>`;
               const topRow = `<div class="activity-card-top">${thumb}${body}${cta}</div>`;
               // attachment row (full width) if present
@@ -1397,50 +1279,23 @@
           });
 
           if(it.lat!=null && it.lng!=null){
-            var typeKey = typeKeyFromItem(it);
-            var isDistribution = (typeKey === 'distribution');
-
-            // Build DivIcon — type-keyed colour dot with pulsing ring for distribution
-            var markerClass = 'lf-marker lf-marker--' + (typeKey || 'other');
-            var ringHtml = isDistribution ? '<span class="lf-marker__ring"></span>' : '';
-            var icon = L.divIcon({
-              className: '',
-              html: '<div class="' + markerClass + '">' + ringHtml + '<span class="lf-marker__dot"></span></div>',
-              iconSize:   isDistribution ? [30, 30] : [20, 20],
-              iconAnchor: isDistribution ? [15, 15] : [10, 10],
-              popupAnchor:[0, isDistribution ? -15 : -10]
-            });
-            const m = L.marker([it.lat, it.lng], { icon: icon });
+            // Distinctive marker: green for distributions, red for other activity types
+            var isDistribution = (String(it.activity_type || '').toLowerCase().indexOf('distribution') !== -1);
+            var markerColor = isDistribution ? '#38b169' : '#ff6b6b';
+            var markerRadius = isDistribution ? 8 : 6;
+            const m = L.circleMarker([it.lat, it.lng], { radius:markerRadius, color:markerColor, fill: true, fillColor: markerColor, fillOpacity: 0.95, weight: 1, className: isDistribution ? 'marker-distribution' : 'marker-other' });
             // try to add to markerLayer, fallback to map if markerLayer isn't a proper LayerGroup
             try{ if(markerLayer && typeof markerLayer.addLayer === 'function'){ markerLayer.addLayer(m); } else { m.addTo(map); } }catch(e){ try{ m.addTo(map); }catch(_){ console.warn('Failed to add marker to any layer', _); } }
-
-            // Build popup
-            const popupTitle   = escapeHtml(it.title || '');
-            const popupLoc     = escapeHtml(it.location || '');
-            const popupNote    = escapeHtml(it.note || '');
-            const popupCount   = it.count ? escapeHtml(String(it.count) + ' Mushaf') : '';
+            const popupTitle = escapeHtml(it.title || '');
+            const popupLoc = escapeHtml(it.location || '');
+            const popupNote = escapeHtml(it.note || '');
+            const popupCount = (it.count ? escapeHtml(String(it.count) + ' Mushaf') : '');
             const popupMission = String(it.mission || '').trim();
             const popupHighlights = String(it.highlights || '').trim();
-            const typeLabel = String(it.activity_type || '').trim();
-
-            var typeColor = isDistribution ? '#BEAA8D' : (typeKey==='program'?'#6fa8dc':typeKey==='meeting'?'#93c47d':typeKey==='media'?'#c27ba0':typeKey==='logistics'?'#f6b26b':'#aaa');
-
-            const typePill = typeLabel ? `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:${typeColor};margin-bottom:10px;">${escapeHtml(typeLabel)}</span>` : '';
-            const missionRow = popupMission ? `<div style="display:flex;align-items:flex-start;gap:6px;margin-top:6px;font-size:12px;color:#9a9288;"><span style="flex-shrink:0;opacity:.6;">Mission</span><span style="color:#e0dbd0;font-weight:600;">${escapeHtml(popupMission)}</span></div>` : '';
-            const noteRow = popupNote ? `<div style="margin-top:6px;font-size:12px;color:#9a9288;line-height:1.45;">${popupNote}</div>` : '';
+            const missionHtml = popupMission ? `<div style="margin-top:4px;opacity:.9;font-size:13px"><span style="font-weight:800">🎯 Mission</span> ${escapeHtml(popupMission)}</div>` : '';
             const highlightsTextHtml = popupHighlights ? escapeHtml(popupHighlights).replace(/\r?\n/g,'<br>') : '';
-            const highlightsRow = popupHighlights ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);font-size:12px;color:#c8c0b4;font-style:italic;line-height:1.5;">&ldquo;${highlightsTextHtml}&rdquo;</div>` : '';
-            const countRow = popupCount ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);"><span style="font-size:18px;font-weight:800;color:#BEAA8D;">${escapeHtml(popupCount)}</span></div>` : '';
-
-            m.bindPopup(
-              `<div style="font-family:Inter,system-ui,Arial;color:#f4f2ee;">`
-              + typePill
-              + `<div style="font-weight:800;font-size:14px;line-height:1.35;margin-bottom:4px;">${popupTitle}</div>`
-              + (popupLoc ? `<div style="font-size:12px;color:#7a7268;">${popupLoc}</div>` : '')
-              + missionRow + noteRow + highlightsRow + countRow
-              + `</div>`,
-              { maxWidth: 280, minWidth: 200 }
-            );
+            const highlightsHtml = popupHighlights ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font-weight:800">💬 Highlights</div><div style="opacity:.95;margin-top:6px;font-style:italic">“${highlightsTextHtml}”</div></div>` : '';
+            m.bindPopup(`<div style="color:#f4f2ee"><b>${popupTitle}</b><div style="opacity:.8;font-size:13px">${popupLoc}</div>${missionHtml}${popupNote?`<div style="margin-top:6px">${popupNote}</div>`:''}${highlightsHtml}${popupCount?`<div style="margin-top:8px;font-weight:700">${popupCount}</div>`:''}</div>`);
             m._ts = it.date.getTime();
             markersById[it.id] = m;
           }
@@ -1666,70 +1521,24 @@
     animation:pulse 1.8s ease-out infinite;
   }
   @keyframes pulse{
-    0%   { box-shadow:0 0 0 0 rgba(190,170,141,.7); }
-    70%  { box-shadow:0 0 0 12px rgba(190,170,141,0); }
-    100% { box-shadow:0 0 0 0 rgba(190,170,141,0); }
+    0%   { box-shadow:0 0 0 0 rgba(107,226,125,.7); }
+    70%  { box-shadow:0 0 0 10px rgba(107,226,125,0); }
+    100% { box-shadow:0 0 0 0 rgba(107,226,125,0); }
   }
 
-  /* ===== Custom DivIcon marker styles ===== */
-  .lf-marker {
-    position: relative;
-    display: flex; align-items: center; justify-content: center;
-  }
-  /* core dot */
-  .lf-marker__dot {
-    width: 12px; height: 12px; border-radius: 50%;
-    background: #6fa8dc;
-    border: 2px solid rgba(255,255,255,.35);
-    box-shadow: 0 2px 8px rgba(0,0,0,.5);
-    position: relative; z-index: 2;
-    transition: transform .15s;
-  }
-  .lf-marker:hover .lf-marker__dot { transform: scale(1.35); }
-
-  /* distribution: gold + pulsing ring */
-  .lf-marker--distribution .lf-marker__dot {
-    width: 14px; height: 14px;
-    background: #BEAA8D;
-    border-color: rgba(255,255,255,.5);
-    box-shadow: 0 0 0 0 rgba(190,170,141,.6), 0 2px 10px rgba(0,0,0,.5);
-    animation: mkPulse 2s ease-out infinite;
-  }
-  .lf-marker--distribution .lf-marker__ring {
-    position: absolute; inset: -8px;
-    border-radius: 50%;
-    border: 1.5px solid rgba(190,170,141,.35);
-    animation: mkRipple 2s ease-out infinite;
-  }
-  @keyframes mkPulse {
-    0%   { box-shadow: 0 0 0 0 rgba(190,170,141,.55), 0 2px 10px rgba(0,0,0,.5); }
-    70%  { box-shadow: 0 0 0 8px rgba(190,170,141,0), 0 2px 10px rgba(0,0,0,.5); }
-    100% { box-shadow: 0 0 0 0 rgba(190,170,141,0),  0 2px 10px rgba(0,0,0,.5); }
-  }
-  @keyframes mkRipple {
-    from { transform: scale(.5); opacity: .8; }
-    to   { transform: scale(2.2); opacity: 0; }
-  }
-
-  /* activity type colours */
-  .lf-marker--program   .lf-marker__dot { background: #6fa8dc; }
-  .lf-marker--meeting   .lf-marker__dot { background: #93c47d; }
-  .lf-marker--media     .lf-marker__dot { background: #c27ba0; }
-  .lf-marker--logistics .lf-marker__dot { background: #f6b26b; }
-  .lf-marker--other     .lf-marker__dot { background: #aaa; }
-
-  /* pulsing pin (legacy, kept for bg markers) */
+  /* larger pulsing pin for the map (DivIcon) */
   .pulse-pin{
-    position:relative; width:12px; height:12px; border-radius:50%;
-    background:#BEAA8D; box-shadow:0 0 0 0 rgba(190,170,141,.6);
+    position:relative; width:16px; height:16px; border-radius:50%;
+    background:#6be27d; box-shadow:0 0 0 0 rgba(107,226,125,.6);
     animation:pulse 1.8s ease-out infinite;
   }
   .pulse-pin:after{
     content:""; position:absolute; left:50%; top:50%;
-    width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%;
-    border:1.5px solid rgba(190,170,141,.4);
+    width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+    border:2px solid rgba(107,226,125,.45);
     animation:ripple 1.8s ease-out infinite;
   }
+  /* Disable pulsing for specific pins by adding the 'no-pulse' class */
   .pulse-pin.no-pulse{ animation: none !important; box-shadow: none !important; }
   .pulse-pin.no-pulse:after{ animation: none !important; display: none !important; }
   @keyframes ripple { from{transform:scale(.6); opacity:.9} to{transform:scale(1.5); opacity:0} }
@@ -1805,7 +1614,7 @@
       background: rgba(17,19,21,0.95) !important;
       border-radius: 12px !important;
       box-shadow: 0 20px 48px rgba(0,0,0,.6) !important;
-      /* no extra padding here — mac-content already has its own padding */
+      padding: 10px !important;
     }
     .map-activity-control .mac-content { max-height: 42vh !important; overflow:auto; }
     /* make the collapsed toggle stick to the right edge and visible */
@@ -2273,15 +2082,13 @@
         
     
             var tile_layer_0205bfd226cfa1b960c5393589936452 = L.tileLayer(
-                window.MAPBOX_TOKEN
-                  ? "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=" + window.MAPBOX_TOKEN
-                  : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=" + (window.MAPBOX_TOKEN || ''),
                 {
   "minZoom": 0,
   "maxZoom": 18,
   "maxNativeZoom": 18,
   "noWrap": false,
-  "attribution": window.MAPBOX_TOKEN ? "\u00a9 Mapbox \u00a9 OpenStreetMap" : "\u00a9 Carto \u00a9 OpenStreetMap",
+  "attribution": "\u00a9 Mapbox \u00a9 OpenStreetMap",
   "subdomains": "abc",
   "detectRetina": false,
   "tms": false,
