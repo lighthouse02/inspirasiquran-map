@@ -483,11 +483,14 @@
       .activity-card[data-type="meeting"]::before     { background: #93c47d; }
       .activity-card[data-type="media"]::before       { background: #c27ba0; }
       .activity-card[data-type="logistics"]::before   { background: #f6b26b; }
+      .activity-card[data-type="update"]::before        { background: #ffb84d; }
+      .activity-card[data-type="class"]::before         { background: #4ecdc4; }
+      .activity-card[data-type="arrival"]::before       { background: #ff8c69; }
 
       /* top row: dot / body / count badge */
       .activity-card-top {
         display: flex; align-items: flex-start; gap: 9px;
-        padding: 11px 12px 11px 12px;
+        padding: 12px 14px;
       }
 
       /* type-coloured dot — aligns with left accent bar colour */
@@ -514,9 +517,9 @@
       .activity-chip {
         display: inline-flex; align-items: center;
         padding: 3px 8px; border-radius: 999px;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(255,255,255,.07);
-        color: #8a8278; font-size: 11px; line-height: 1;
+        background: rgba(255,255,255,.05);
+        border: 1px solid rgba(255,255,255,.10);
+        color: #a09890; font-size: 11px; line-height: 1;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
       }
       .activity-chip--type {
@@ -529,22 +532,32 @@
       .activity-card[data-type="meeting"]     .activity-chip--type { color:#93c47d; background:rgba(147,196,125,.07); border-color:rgba(147,196,125,.18); }
       .activity-card[data-type="media"]       .activity-chip--type { color:#c27ba0; background:rgba(194,123,160,.07); border-color:rgba(194,123,160,.18); }
       .activity-card[data-type="logistics"]   .activity-chip--type { color:#f6b26b; background:rgba(246,178,107,.07); border-color:rgba(246,178,107,.18); }
+      .activity-card[data-type="update"]       .activity-chip--type { color:#ffb84d; background:rgba(255,184,77,.07);  border-color:rgba(255,184,77,.18); }
+      .activity-card[data-type="class"]        .activity-chip--type { color:#4ecdc4; background:rgba(78,205,196,.07);  border-color:rgba(78,205,196,.18); }
+      .activity-card[data-type="arrival"]      .activity-chip--type { color:#ff8c69; background:rgba(255,140,105,.07); border-color:rgba(255,140,105,.18); }
 
       /* title */
       .activity-card .title {
-        color: #ede8e0; font-weight: 700; font-size: 13px;
-        line-height: 1.4; margin-bottom: 0;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        color: #ede8e0; font-weight: 700; font-size: 14px;
+        line-height: 1.35; margin-bottom: 2px;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden;
       }
 
       /* description */
       .activity-card .desc {
-        color: #706860; font-size: 12px; line-height: 1.4;
+        color: #8a8278; font-size: 12px; line-height: 1.4;
         margin-top: 4px;
         display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
         overflow: hidden;
       }
       .activity-card .desc:empty { display: none; }
+
+      /* location line below title */
+      .activity-card .card-location {
+        margin-top: 3px; font-size: 11px; color: #7a7268;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
 
       /* count badge — top-right corner */
       .activity-card .cta {
@@ -553,11 +566,12 @@
       }
       .activity-count {
         display: inline-block;
-        font-size: 11px; font-weight: 800; line-height: 1;
+        font-size: 12px; font-weight: 800; line-height: 1;
         color: #111315;
         background: #BEAA8D;
-        padding: 4px 9px; border-radius: 999px;
+        padding: 5px 10px; border-radius: 999px;
         white-space: nowrap; flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(190,170,141,.3);
       }
       .activity-count:empty { display: none; }
 
@@ -1304,9 +1318,12 @@
 
         // append items (oldest first so newest appears last by addActivity which inserts at top)
         for(const it of items){
-          const dateStr = formatCardDate(it.date) || it.date.toLocaleString();
-          const countStr = it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '';
+          const relTime = timeAgo(it.date);
+          const countStr = it.count_number
+            ? (formatNumber(it.count_number) + ' Mushaf')
+            : (it.count ? (it.count + (typeof it.count === 'number' ? ' Mushaf' : '')) : '');
           const locationShort = simplifyPlaceName(it.location || '');
+          const countryStr = it.country ? escapeHtml(it.country) : '';
           // Render Sumud-style activity card
           const card = document.createElement('div'); card.className = 'activity-card';
           card.setAttribute('data-activity-id', it.id);
@@ -1316,15 +1333,20 @@
           let thumb = `<div class="thumb"><span class="activity-dot" aria-hidden="true"></span></div>`;
           // keep the small dot thumb (do not replace it with an inline image)
           const typeLabel = (it.activity_type ? String(it.activity_type) : '').trim();
+          // top meta row: TYPE pill + relative time
           const metaParts = [
-            `<span class="activity-chip">${escapeHtml(dateStr)}</span>`,
-            (locationShort ? `<span class="activity-chip">${escapeHtml(locationShort)}</span>` : ''),
-            (typeLabel ? `<span class="activity-chip activity-chip--type">${escapeHtml(typeLabel.toUpperCase())}</span>` : '')
+            (typeLabel ? `<span class="activity-chip activity-chip--type">${escapeHtml(typeLabel.toUpperCase())}</span>` : ''),
+            `<span class="activity-chip">${escapeHtml(relTime)}</span>`,
           ].filter(Boolean).join('');
           const meta = `<div class="meta">${metaParts}</div>`;
           const titleHtml = `<div class="title">${escapeHtml(it.title)}</div>`;
+          // location line: show short place name + country for context
+          const locDisplay = [locationShort, countryStr].filter(Boolean).join(', ');
+          const locHtml = locDisplay
+            ? `<div class="card-location">${locDisplay}</div>`
+            : '';
           const descHtml = `<div class="desc">${escapeHtml(it.note||'')}</div>`;
-          const body = `<div class="body">${meta}${titleHtml}${descHtml}</div>`;
+          const body = `<div class="body">${meta}${titleHtml}${locHtml}${descHtml}</div>`;
           const cta = `<div class="cta"><div class="activity-count">${escapeHtml(countStr)}</div></div>`;
               const topRow = `<div class="activity-card-top">${thumb}${body}${cta}</div>`;
               // attachment row (full width) if present
@@ -2251,13 +2273,15 @@
         
     
             var tile_layer_0205bfd226cfa1b960c5393589936452 = L.tileLayer(
-                "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=" + (window.MAPBOX_TOKEN || ''),
+                window.MAPBOX_TOKEN
+                  ? "https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=" + window.MAPBOX_TOKEN
+                  : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
                 {
   "minZoom": 0,
   "maxZoom": 18,
   "maxNativeZoom": 18,
   "noWrap": false,
-  "attribution": "\u00a9 Mapbox \u00a9 OpenStreetMap",
+  "attribution": window.MAPBOX_TOKEN ? "\u00a9 Mapbox \u00a9 OpenStreetMap" : "\u00a9 Carto \u00a9 OpenStreetMap",
   "subdomains": "abc",
   "detectRetina": false,
   "tms": false,

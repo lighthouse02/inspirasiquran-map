@@ -1,0 +1,13 @@
+[build]
+  # Generates mapbox-config.js from the MAPBOX_TOKEN env variable set in Netlify UI.
+  # Set MAPBOX_TOKEN in: Netlify dashboard → Site settings → Environment variables
+  command = "printf 'window.MAPBOX_TOKEN = \"%s\";\n' \"${MAPBOX_TOKEN:-}\" > mapbox-config.js"
+  publish = "."
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[headers]]
+  for = "/mapbox-config.js"
+  [headers.values]
+    Cache-Control = "no-store"
