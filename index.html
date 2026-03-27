@@ -459,16 +459,16 @@
       .activity-card {
         position: relative;
         display: flex; flex-direction: column;
-        background: rgba(20,22,26,0.82);
-        border: 1px solid rgba(190,170,141,.08);
+        background: rgba(28,31,37,0.9);
+        border: 1px solid rgba(190,170,141,.1);
         border-radius: 12px;
         overflow: hidden;
         cursor: pointer;
         transition: border-color .15s, box-shadow .15s, transform .1s;
       }
       .activity-card:hover {
-        border-color: rgba(190,170,141,.2);
-        box-shadow: 0 6px 22px rgba(0,0,0,.45);
+        border-color: rgba(190,170,141,.22);
+        box-shadow: 0 6px 22px rgba(0,0,0,.5);
         transform: translateY(-1px);
       }
       /* left accent bar by activity type */
@@ -484,21 +484,23 @@
       .activity-card[data-type="media"]::before       { background: #c27ba0; }
       .activity-card[data-type="logistics"]::before   { background: #f6b26b; }
 
-      .activity-card.activity-card--stack { flex-direction: column; }
-
       /* top row: dot / body / count badge */
       .activity-card-top {
-        display: flex; align-items: flex-start; gap: 10px;
-        padding: 11px 12px 11px 15px;
+        display: flex; align-items: flex-start; gap: 9px;
+        padding: 11px 12px 11px 12px;
       }
 
-      /* pulsing dot — shows live event */
+      /* type-coloured dot — aligns with left accent bar colour */
       .activity-card .thumb {
-        flex-shrink: 0; width: 8px; height: 8px; margin-top: 5px;
+        flex-shrink: 0; width: 9px; height: 9px; margin-top: 4px;
         border-radius: 50%;
         background: rgba(190,170,141,.35);
       }
-      .activity-card[data-type="distribution"] .thumb { background: #BEAA8D; box-shadow: 0 0 0 3px rgba(190,170,141,.12); }
+      .activity-card[data-type="distribution"] .thumb { background: #BEAA8D; box-shadow: 0 0 0 3px rgba(190,170,141,.15); }
+      .activity-card[data-type="program"]      .thumb { background: #6fa8dc; box-shadow: 0 0 0 3px rgba(111,168,220,.15); }
+      .activity-card[data-type="meeting"]      .thumb { background: #93c47d; box-shadow: 0 0 0 3px rgba(147,196,125,.15); }
+      .activity-card[data-type="media"]        .thumb { background: #c27ba0; box-shadow: 0 0 0 3px rgba(194,123,160,.15); }
+      .activity-card[data-type="logistics"]    .thumb { background: #f6b26b; box-shadow: 0 0 0 3px rgba(246,178,107,.15); }
       .activity-dot { display: none; } /* replaced by thumb in new design */
 
       /* body */
@@ -1001,7 +1003,7 @@
                     toggle.textContent = '▼';
                     if(content) content.style.display = '';
                     container.style.width = '360px';
-                    container.style.overflow = '';
+                    container.style.overflow = 'hidden';
                     try{ localStorage.setItem('mapActivityCollapsed','false'); }catch(e){}
                   }
                 });
@@ -1307,8 +1309,6 @@
           const locationShort = simplifyPlaceName(it.location || '');
           // Render Sumud-style activity card
           const card = document.createElement('div'); card.className = 'activity-card';
-          // stack top row and attachment vertically so the attachment spans full card width
-          card.classList.add('activity-card--stack');
           card.setAttribute('data-activity-id', it.id);
           card.setAttribute('data-ts', it.date.getTime());
           card.setAttribute('data-type', typeKeyFromItem(it));
@@ -1783,7 +1783,7 @@
       background: rgba(17,19,21,0.95) !important;
       border-radius: 12px !important;
       box-shadow: 0 20px 48px rgba(0,0,0,.6) !important;
-      padding: 10px !important;
+      /* no extra padding here — mac-content already has its own padding */
     }
     .map-activity-control .mac-content { max-height: 42vh !important; overflow:auto; }
     /* make the collapsed toggle stick to the right edge and visible */
